@@ -109,8 +109,8 @@ class ModelTrainer:
             d_model = model_params["d_model"]
             lr = f'{training_params["learning_rate"]:.6f}'
             bs = training_params["batch_size"]
-            # 使用models/前缀，与前端保持一致
-            model_path = f'models/model_c{d_model}_lr{lr}_bs{bs}'
+            # 生成模型路径，注意不要重复models/
+            model_path = f'model_c{d_model}_lr{lr}_bs{bs}'
             model_save_dir = os.path.join(self.model_dir, model_path)
         os.makedirs(model_save_dir, exist_ok=True)
         
@@ -119,9 +119,58 @@ class ModelTrainer:
         val_data = np.load(os.path.join(data_path, 'val_data.npz'))
         test_data = np.load(os.path.join(data_path, 'test_data.npz'))
         
+        # 加载所有必要的数据字段
         X_train, y_train = train_data['X_train'], train_data['y_train']
         X_val, y_val = val_data['X_val'], val_data['y_val']
         X_test, y_test = test_data['X_test'], test_data['y_test']
+        
+        # 尝试加载delta和mask数据，如果存在的话
+        try:
+            delta_train = train_data['delta_train']
+            delta_val = val_data['delta_val'] 
+            delta_test = test_data['delta_test']
+            print("成功加载delta数据")
+        except KeyError:
+            print("npz文件中没有delta数据，将创建默认值")
+            # 创建默认的delta数据 - 全1，表示时间步长为1
+            delta_train = np.ones((X_train.shape[0], X_train.shape[1], 1), dtype=np.float32)
+            delta_val = np.ones((X_val.shape[0], X_val.shape[1], 1), dtype=np.float32)
+            delta_test = np.ones((X_test.shape[0], X_test.shape[1], 1), dtype=np.float32)
+            
+        try:
+            mask_train = train_data['mask_train']
+            mask_val = val_data['mask_val']
+            mask_test = test_data['mask_test']
+            print("成功加载mask数据")
+        except KeyError:
+            print("npz文件中没有mask数据，将创建默认值")
+            # 创建默认的mask数据 - 全True，表示所有数据点都有效
+            mask_train = np.ones((X_train.shape[0], X_train.shape[1]), dtype=bool)
+            mask_val = np.ones((X_val.shape[0], X_val.shape[1]), dtype=bool)
+            mask_test = np.ones((X_test.shape[0], X_test.shape[1]), dtype=bool)
+            
+        # 获取参数名
+        param_names = self._get_param_names(data_path)
+        
+        # 严格按照main.py中的处理方式
+        # 在main.py中，输入数据X包含原始特征，delta_train包含时间差
+        print(f"输入数据形状: X_train={X_train.shape}, delta_train={delta_train.shape}")
+        
+        # 检查X_train的维度，确保与my_model.py中的期望维度匹配
+        # main.py中的preprocess_data函数处理后，输入特征维度为3
+        # my_model.py中的forward方法会将输入与时间差和绝对时间拼接，形成总维度5
+        # 因此，X_train的最后一个维度应该是3，以便拼接后总维度为5
+        if X_train.shape[2] > 3:
+            print(f"调整输入维度: 从{X_train.shape[2]}维减少到3维 (与main.py一致)")
+            X_train = X_train[:, :, :3]
+            X_val = X_val[:, :, :3]
+            X_test = X_test[:, :, :3]
+            
+        # 确保参数名与main.py中一致，用于绘图标题
+        if not param_names or len(param_names) == 0:
+            # 使用main.py中的默认中文参数名
+            param_names = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
+            print(f"使用默认中文参数名: {param_names}")
         
         # 设置输入和输出维度
         model_params['input_dim'] = X_train.shape[2]
@@ -148,43 +197,74 @@ class ModelTrainer:
         # 打印数据形状，用于调试
         print(f"数据形状: X_train={X_train.shape}, X_val={X_val.shape}, X_test={X_test.shape}")
         print(f"数据形状: y_train={y_train.shape}, y_val={y_val.shape}, y_test={y_test.shape}")
-        
-        # 创建掩码数据 - 默认所有数据点都是有效的
-        if 'mask_train' not in locals() or 'mask_val' not in locals() or 'mask_test' not in locals():
-            print("创建默认掩码数据...")
-            mask_train = np.ones((X_train.shape[0], X_train.shape[1]), dtype=bool)
-            mask_val = np.ones((X_val.shape[0], X_val.shape[1]), dtype=bool)
-            mask_test = np.ones((X_test.shape[0], X_test.shape[1]), dtype=bool)
+        print(f"数据形状: delta_train={delta_train.shape}, delta_val={delta_val.shape}, delta_test={delta_test.shape}")
+        print(f"数据形状: mask_train={mask_train.shape}, mask_val={mask_val.shape}, mask_test={mask_test.shape}")
         
         # 创建数据集
         from my_dataset import GeotechDataset
-        train_dataset = GeotechDataset(X_train, delta_train if 'delta_train' in locals() else None, mask_train, y_train)
-        val_dataset = GeotechDataset(X_val, delta_val if 'delta_val' in locals() else None, mask_val, y_val)
-        test_dataset = GeotechDataset(X_test, delta_test if 'delta_test' in locals() else None, mask_test, y_test)
+        train_dataset = GeotechDataset(X_train, delta_train, mask_train, y_train)
+        val_dataset = GeotechDataset(X_val, delta_val, mask_val, y_val)
+        test_dataset = GeotechDataset(X_test, delta_test, mask_test, y_test)
         
         # 创建数据加载器
         train_loader = DataLoader(train_dataset, batch_size=training_params['batch_size'], shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=training_params['batch_size'], shuffle=False)
         test_loader = DataLoader(test_dataset, batch_size=training_params['batch_size'], shuffle=False)
         
-        # 创建模型 - TimeSeriesTransformer不接受dropout参数
-        model = TimeSeriesTransformer(
-            input_dim=model_params['input_dim'],
-            d_model=model_params['d_model'],
-            nhead=model_params['nhead'],
-            num_layers=model_params['num_layers'],
-            num_outputs=model_params['output_dim']
-        ).to(device)
+        # 严格按照main.py中的处理方式
+        # 在my_model.py中，TimeSeriesTransformer的默认input_dim是5
+        # 这个input_dim是指输入特征、时间差和绝对时间拼接后的总维度
+        # 由于我们已经将X_train的最后一个维度调整为3，加上时间差和绝对时间后，总维度为5
+        print(f"原始输入维度: {X_train.shape[2]}")
+        print(f"拼接后总维度: {X_train.shape[2] + 2}")  # +2是因为会拼接时间差和绝对时间
+        
+        # 检查是否是自定义参数模式
+        is_custom_mode = model_params.get('mode') == 'custom'
+        
+        # 创建模型
+        if is_custom_mode:
+            # 如果是自定义模式，使用与main.py中一致的参数
+            print("使用自定义模式，参数与main.py一致")
+            model = TimeSeriesTransformer(
+                input_dim=7,  # 固定为5，与my_model.py中的默认值一致
+                d_model=256,  # main.py中使用的值
+                nhead=4,      # main.py中使用的值
+                num_layers=2, # main.py中使用的值
+                num_outputs=model_params['output_dim']
+            ).to(device)
+        else:
+            # 如果是贝叶斯优化模式，使用优化后的参数
+            print("使用贝叶斯优化参数")
+            model = TimeSeriesTransformer(
+                input_dim=5,  # 固定为5，与my_model.py中的默认值一致
+                d_model=model_params['d_model'],
+                nhead=model_params['nhead'],
+                num_layers=model_params['num_layers'],
+                num_outputs=model_params['output_dim']
+            ).to(device)
         
         # 注意：虽然我们保留dropout参数用于路径命名，但TimeSeriesTransformer本身不使用它
         
         # 损失函数和优化器
         criterion = nn.MSELoss()
-        optimizer = optim.Adam(
-            model.parameters(), 
-            lr=training_params['learning_rate'],
-            weight_decay=training_params['weight_decay']
-        )
+        
+        if is_custom_mode:
+            # 自定义模式使用与main.py一致的优化器参数
+            print("使用自定义模式的优化器参数")
+            optimizer = optim.Adam(
+                model.parameters(), 
+                lr=8.564825241340346e-05,  # main.py中使用的值
+                weight_decay=2.3600012291720694e-07  # main.py中使用的值
+            )
+        else:
+            # 贝叶斯优化模式使用优化后的参数
+            print("使用贝叶斯优化的优化器参数")
+            optimizer = optim.Adam(
+                model.parameters(), 
+                lr=training_params['learning_rate'],
+                weight_decay=training_params['weight_decay']
+            )
+            
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
         
         # 训练循环 - 严格按照main.py中的逻辑
@@ -214,8 +294,13 @@ class ModelTrainer:
             
             print(f'Epoch [{epoch + 1}/{epochs}], Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}')
         
+        # 严格按照main.py中的绘图和保存逻辑
+        # 在main.py中，会在模型训练完成后绘制损失曲线、预测对比图等，并保存到MODEL_DIR目录
+        
         # 绘制损失曲线（按main.py逻辑）
-        loss_curve_base64 = self._plot_loss_history(train_losses, val_losses)
+        loss_curve_zh_path = os.path.join(model_save_dir, 'loss_history_zh.png')
+        loss_curve_en_path = os.path.join(model_save_dir, 'loss_history_en.png')
+        loss_curve_base64 = self._plot_loss_history(train_losses, val_losses, loss_curve_zh_path, loss_curve_en_path)
         
         # 加载最佳模型
         model.load_state_dict(torch.load(best_model_path))
@@ -228,10 +313,18 @@ class ModelTrainer:
         # 计算详细评估指标
         metrics = self._calculate_metrics(test_labels, test_preds, param_names)
         
-        # 生成各种对比图
-        combined_plots = self._plot_predictions_combined(train_labels, train_preds, test_labels, test_preds, param_names, metrics)
-        train_plots = self._plot_predictions_individual(train_labels, train_preds, param_names, metrics, 'train')
-        test_plots = self._plot_predictions_individual(test_labels, test_preds, param_names, metrics, 'test')
+        # 生成各种对比图 - 保存到模型目录
+        combined_plots = self._plot_predictions_combined(train_labels, train_preds, test_labels, test_preds, param_names, metrics, model_save_dir)
+        train_plots = self._plot_predictions_individual(train_labels, train_preds, param_names, metrics, 'train', model_save_dir)
+        test_plots = self._plot_predictions_individual(test_labels, test_preds, param_names, metrics, 'test', model_save_dir)
+        
+        # 绘制相对误差图 - main.py中有这个功能
+        self._plot_relative_errors_per_param(metrics, param_names, 'test', model_save_dir)
+        self._plot_relative_errors_per_param(metrics, param_names, 'train', model_save_dir)
+        
+        # 绘制预测值与真实值随样本索引变化的图
+        self._plot_predictions_vs_index(test_labels, test_preds, param_names, 'test', model_save_dir)
+        self._plot_predictions_vs_index(train_labels, train_preds, param_names, 'train', model_save_dir)
         
         # 简化指标供前端展示
         simple_train_metrics = {'loss': float(train_losses[-1]), 'r2': float(metrics[-1]['r2'])}
@@ -266,9 +359,11 @@ class ModelTrainer:
         }
         
     def _get_param_names(self, data_path):
-        """从data_info.txt文件中获取参数名称"""
+        """从data_info.txt文件中获取参数名称，确保返回中文参数名"""
         data_info_path = os.path.join(data_path, 'data_info.txt')
-        param_names = []
+        
+        # 默认使用main.py中的中文参数名
+        default_param_names = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
         
         if os.path.exists(data_info_path):
             # 尝试多种编码读取文件
@@ -280,11 +375,12 @@ class ModelTrainer:
                                 # 提取参数名
                                 params_str = line.split(':', 1)[1].strip()
                                 param_names = [p.strip() for p in params_str.split(',')]
-                                return param_names
+                                if param_names and len(param_names) > 0:
+                                    return param_names
                 except Exception as e:
                     continue
                     
-        return param_names
+        return default_param_names
     
     def _train_epoch(self, model, dataloader, criterion, optimizer):
         """训练一个epoch - 严格按照my_train.py中的train_model实现"""
@@ -357,8 +453,17 @@ class ModelTrainer:
             'rmse': rmse
         }
     
-    def _plot_loss_history(self, train_losses, val_losses):
-        """绘制训练和验证损失曲线，与main.py中的plot_loss_history保持一致"""
+    def _plot_loss_history(self, train_losses, val_losses, zh_path, en_path):
+        """
+        绘制训练和验证损失曲线，严格按照main.py中的plot_loss_history实现
+        
+        参数:
+            train_losses: 训练损失列表
+            val_losses: 验证损失列表
+            zh_path: 中文版图表保存路径
+            en_path: 英文版图表保存路径
+        """
+        # 绘制中文版
         plt.figure(figsize=(14 / 2.54, 8 / 2.54))  # 宽14cm
         
         # 绘制损失曲线
@@ -391,10 +496,8 @@ class ModelTrainer:
         plt.ylabel('均方误差')
         plt.grid(True)
         
-        # 将图表保存到文件和生成base64编码
-        model_save_dir = os.path.join(self.model_dir, 'train_results')
-        os.makedirs(model_save_dir, exist_ok=True)
-        plt.savefig(os.path.join(model_save_dir, 'loss_history_zh.png'), dpi=300)
+        # 保存中文版图表
+        plt.savefig(zh_path, dpi=300)
         
         # 将图表转换为base64编码的字符串
         buffer = BytesIO()
@@ -403,13 +506,43 @@ class ModelTrainer:
         image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         plt.close()
         
+        # 绘制英文版
+        plt.figure(figsize=(14 / 2.54, 8 / 2.54))  # 宽14cm
+        
+        # 绘制损失曲线
+        train_line, = plt.plot(train_losses, label=f'Training MSE (min: {min(train_losses):.4f})')
+        val_line, = plt.plot(val_losses, label=f'Validation MSE (min: {min(val_losses):.4f})')
+        
+        # 标记最小损失点
+        plt.scatter(min_train_epoch, min_train_loss, color=train_line.get_color(), s=100, zorder=5)
+        plt.scatter(min_val_epoch, min_val_loss, color=val_line.get_color(), s=100, zorder=5)
+        
+        # 添加文本标注
+        plt.text(min_train_epoch, min_train_loss + 0.03,
+                 f'Min Train Epoch: {min_train_epoch + 1}',
+                 ha='center', va='bottom')
+        plt.text(min_val_epoch, min_val_loss + 0.1,
+                 f'Min Val Epoch: {min_val_epoch + 1}',
+                 ha='center', va='bottom')
+        
+        # 更新图例标签以包含最小损失值
+        plt.legend(loc='upper right')
+        
+        plt.title('Training and Validation Loss History (MSE)')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.grid(True)
+        
+        # 保存英文版图表
+        plt.savefig(en_path, dpi=300)
+        plt.close()
+        
         return image_base64
         
-    def _plot_predictions_combined(self, true_train, pred_train, true_test, pred_test, param_names, metrics):
+    def _plot_predictions_combined(self, true_train, pred_train, true_test, pred_test, param_names, metrics, save_dir):
         """每个参数绘图，训练集与测试集一起展示，与main.py中的plot_predictions_combined保持一致"""
         result_images = []
-        model_save_dir = os.path.join(self.model_dir, 'train_results')
-        os.makedirs(model_save_dir, exist_ok=True)
+        os.makedirs(save_dir, exist_ok=True)
         
         for i, param in enumerate(param_names):
             title = f'{param} - 训练与测试集'
@@ -451,7 +584,7 @@ class ModelTrainer:
                    bbox=dict(facecolor='white', alpha=0.7))
 
             # 保存
-            fig_path = os.path.join(model_save_dir, f'combined_prediction_{param}.png')
+            fig_path = os.path.join(save_dir, f'combined_prediction_{param}_zh.png')
             fig.savefig(fig_path, dpi=300)
             
             # 转换为base64并添加到结果中
@@ -470,11 +603,12 @@ class ModelTrainer:
             
         return result_images
 
-    def _plot_predictions_individual(self, true, pred, param_names, metrics, dataset_type='test'):
+    def _plot_predictions_individual(self, true, pred, param_names, metrics, dataset_type='test', save_dir=None):
         """每个参数单独绘图，训练集和测试集分别展示，与main.py中的plot_predictions_individual保持一致"""
         result_images = []
-        model_save_dir = os.path.join(self.model_dir, 'train_results')
-        os.makedirs(model_save_dir, exist_ok=True)
+        if save_dir is None:
+            save_dir = os.path.join(self.model_dir, 'train_results')
+        os.makedirs(save_dir, exist_ok=True)
         
         for i, param in enumerate(param_names):
             title = f"{param} - {'测试' if dataset_type == 'test' else '训练'}集"
@@ -517,7 +651,7 @@ class ModelTrainer:
                    bbox=dict(facecolor='white', alpha=0.7))
 
             # 保存图像
-            fig_path = os.path.join(model_save_dir, f'{dataset_type}_prediction_{param}.png')
+            fig_path = os.path.join(save_dir, f'{dataset_type}_prediction_{param}_zh.png')
             fig.savefig(fig_path, dpi=300)
             
             # 转换为base64并添加到结果中
@@ -552,7 +686,8 @@ class ModelTrainer:
                 'mse': mean_squared_error(param_true, param_pred),
                 'mape': np.mean(relative_error),
                 'mean_relative_error': np.mean(relative_error),
-                'max_relative_error': np.max(relative_error)
+                'max_relative_error': np.max(relative_error),
+                'relative_errors': relative_error  # 保存每个样本的相对误差，用于绘图
             }
             
             metrics.append(param_metrics)
@@ -567,9 +702,193 @@ class ModelTrainer:
             'r2': overall_r2,
             'mse': overall_mse,
             'mape': overall_mape,
-            'mean_relative_error': np.mean(overall_relative_error)
+            'mean_relative_error': np.mean(overall_relative_error),
+            'relative_errors': overall_relative_error
         }
         
         metrics.append(overall_metrics)  # 最后一个为整体指标
         
         return metrics
+        
+    def _plot_relative_errors_per_param(self, metrics, param_names, dataset_type='test', save_dir=None):
+        """为每个参数单独绘制相对误差折线图，与main.py中的plot_relative_errors_per_param保持一致"""
+        if save_dir is None:
+            save_dir = os.path.join(self.model_dir, 'train_results')
+        os.makedirs(save_dir, exist_ok=True)
+        
+        result_images = []
+        
+        for i, param in enumerate(param_names):
+            # 中文版
+            title = f"{param}相对误差 - {'测试' if dataset_type == 'test' else '训练'}集"
+            xlabel = '样本编号'
+            ylabel = '相对误差 (%)'
+            legend_label = '10%误差阈值'
+            
+            errors = metrics[i]['relative_errors']
+            
+            # 筛除相对误差大于阈值的样本，与main.py保持一致
+            if param == '拱顶下沉':
+                mask = errors <= 10
+            else:
+                mask = errors <= 18
+            filtered_errors = errors[mask]
+            filtered_indices = np.arange(len(errors))[mask]
+            
+            # 创建新图形
+            plt.figure(figsize=(12 / 2.54, 8 / 2.54))
+            
+            # 绘制误差
+            plt.plot(filtered_indices, filtered_errors, 'o-', label=f'{param}')
+            
+            # 添加阈值线
+            plt.axhline(y=10, color='red', linestyle='--', alpha=0.7, label=legend_label)
+            
+            # 设置标题和标签
+            plt.title(title)
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
+            
+            # 添加图例
+            plt.legend(loc='upper right')
+            plt.grid(True)
+            
+            # 保存中文版图形
+            zh_path = os.path.join(save_dir, f'{param}_{dataset_type}_errors_zh.png')
+            plt.savefig(zh_path, dpi=300)
+            
+            # 转换为base64并添加到结果中
+            buffer = BytesIO()
+            plt.savefig(buffer, format='png', dpi=100)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            result_images.append({
+                'param': param,
+                'type': f'{dataset_type}_errors',
+                'image': image_base64,
+                'path': zh_path
+            })
+            plt.close()
+            
+            # 英文版
+            title = f'Relative Errors for {param} - {dataset_type.capitalize()} Set'
+            xlabel = 'Sample Index'
+            ylabel = 'Relative Error (%)'
+            legend_label = '10% Error Threshold'
+            
+            # 创建新图形
+            plt.figure(figsize=(12 / 2.54, 8 / 2.54))
+            
+            # 绘制误差
+            plt.plot(filtered_indices, filtered_errors, 'o-', label=f'{param}')
+            
+            # 添加阈值线
+            plt.axhline(y=10, color='red', linestyle='--', alpha=0.7, label=legend_label)
+            
+            # 设置标题和标签
+            plt.title(title)
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
+            
+            # 添加图例
+            plt.legend(loc='upper right')
+            plt.grid(True)
+            
+            # 保存英文版图形
+            en_path = os.path.join(save_dir, f'{param}_{dataset_type}_errors_en.png')
+            plt.savefig(en_path, dpi=300)
+            plt.close()
+        
+        return result_images
+        
+    def _plot_predictions_vs_index(self, true, pred, param_names, dataset_type='test', save_dir=None, max_samples=100):
+        """绘制真实值与预测值随样本索引变化的折线图，与main.py中的plot_predictions_vs_index保持一致"""
+        if save_dir is None:
+            save_dir = os.path.join(self.model_dir, 'train_results')
+        os.makedirs(save_dir, exist_ok=True)
+        
+        result_images = []
+        
+        # 限制样本数量以避免图表过于密集
+        if len(true) > max_samples:
+            indices = np.random.choice(len(true), max_samples, replace=False)
+            true = true[indices]
+            pred = pred[indices]
+            sample_indices = np.arange(max_samples)
+        else:
+            sample_indices = np.arange(len(true))
+        
+        # 为每个参数单独绘图
+        for i, param in enumerate(param_names):
+            # 中文版
+            title_suffix = f' - {"测试" if dataset_type == "test" else "训练"}集'
+            true_label = '真实值'
+            pred_label = '预测值'
+            xlabel = '样本编号'
+            ylabel = '数值 (mm)'
+            
+            param_true = true[:, i]
+            param_pred = pred[:, i]
+            
+            # 创建新图形
+            plt.figure(figsize=(12 / 2.54, 8 / 2.54))
+            
+            # 绘制真实值和预测值
+            plt.plot(sample_indices, param_true, 'b-', linewidth=1.5, label=true_label)
+            plt.plot(sample_indices, param_pred, 'r--', linewidth=1.5, label=pred_label)
+            
+            # 设置标题和标签
+            plt.title(f'{param}{title_suffix}')
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
+            
+            # 添加图例
+            plt.legend(loc='upper right')
+            plt.grid(True)
+            
+            # 保存中文版图形
+            zh_path = os.path.join(save_dir, f'{param}_{dataset_type}_vs_index_zh.png')
+            plt.savefig(zh_path, dpi=300)
+            
+            # 转换为base64并添加到结果中
+            buffer = BytesIO()
+            plt.savefig(buffer, format='png', dpi=100)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            result_images.append({
+                'param': param,
+                'type': f'{dataset_type}_vs_index',
+                'image': image_base64,
+                'path': zh_path
+            })
+            plt.close()
+            
+            # 英文版
+            title_suffix = f' - {dataset_type.capitalize()} Set'
+            true_label = 'True Values'
+            pred_label = 'Predictions'
+            xlabel = 'Sample Index'
+            ylabel = 'Value (mm)'
+            
+            # 创建新图形
+            plt.figure(figsize=(12 / 2.54, 8 / 2.54))
+            
+            # 绘制真实值和预测值
+            plt.plot(sample_indices, param_true, 'b-', linewidth=1.5, label=true_label)
+            plt.plot(sample_indices, param_pred, 'r--', linewidth=1.5, label=pred_label)
+            
+            # 设置标题和标签
+            plt.title(f'{param}{title_suffix}')
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
+            
+            # 添加图例
+            plt.legend(loc='upper right')
+            plt.grid(True)
+            
+            # 保存英文版图形
+            en_path = os.path.join(save_dir, f'{param}_{dataset_type}_vs_index_en.png')
+            plt.savefig(en_path, dpi=300)
+            plt.close()
+        
+        return result_images

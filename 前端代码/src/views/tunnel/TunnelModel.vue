@@ -79,7 +79,8 @@ const modelParams = ref({
   nhead: 4,
   num_layers: 2,
   input_dim: 7,
-  output_dim: 5
+  output_dim: 5,
+  dropout: 0.05  // 添加dropout参数，默认值0.05
 })
 
 // 训练参数相关

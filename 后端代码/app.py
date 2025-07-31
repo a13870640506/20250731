@@ -176,7 +176,13 @@ def train_model_api():
         d_model = int(request.form.get('d_model', 256))
         nhead = int(request.form.get('nhead', 4))
         num_layers = int(request.form.get('num_layers', 2))
-        dropout = float(request.form.get('dropout', 0.05))
+        dropout_value = request.form.get('dropout')
+        dropout = 0.05  # 默认值
+        if dropout_value and dropout_value != 'undefined':
+            try:
+                dropout = float(dropout_value)
+            except ValueError:
+                pass  # 如果转换失败，使用默认值
         model_save_path = request.form.get('model_save_path')
         
         if not data_path or not os.path.exists(data_path):

@@ -17,9 +17,9 @@ import matplotlib as mpl
 from matplotlib.ticker import MultipleLocator
 from sklearn.metrics import r2_score, mean_squared_error
 
-from my_dataset import GeotechDataset
 from my_model import TimeSeriesTransformer
 from my_train import train_model
+from my_dataset import GeotechDataset
 from my_inference import validate_model
 
 import pandas as pd

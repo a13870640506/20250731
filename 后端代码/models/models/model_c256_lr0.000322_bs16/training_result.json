@@ -1,0 +1,20 @@
+{
+    "model_params": {
+        "d_model": 256,
+        "nhead": 2,
+        "num_layers": 1,
+        "dropout": 0.05,
+        "input_dim": 3,
+        "output_dim": 5
+    },
+    "training_params": {
+        "epochs": 300,
+        "batch_size": 16,
+        "learning_rate": 0.0003222898803337917,
+        "weight_decay": 1.306844524367363e-07
+    },
+    "best_epoch": 270,
+    "metrics": [
+        {
+            "r2": -0.061499595642089844,
+            "mse": 
