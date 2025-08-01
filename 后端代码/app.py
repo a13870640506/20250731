@@ -579,10 +579,18 @@ def get_model_result():
         metrics_path = os.path.join(full_path, 'metrics.json')
         print(f"尝试加载评估指标: {metrics_path}")
         if os.path.exists(metrics_path):
-            with open(metrics_path, 'r', encoding='utf-8') as f:
-                metrics = json.load(f)
-                result.update(metrics)
-                print(f"成功加载评估指标: {metrics}")
+            try:
+                with open(metrics_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.strip():
+                        metrics = json.loads(content)
+                        result.update(metrics)
+                        print(f"成功加载评估指标: {metrics}")
+                    else:
+                        raise ValueError("metrics.json文件为空")
+            except Exception as e:
+                print(f"读取metrics.json失败: {e}")
+                # 如果解析失败，尝试从training_result.json获取指标
         else:
             print(f"评估指标文件不存在: {metrics_path}")
             # 尝试加载training_result.json
