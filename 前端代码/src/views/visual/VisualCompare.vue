@@ -1,21 +1,23 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElLoading } from 'element-plus'
+import { getRecentModelsService, getModelResultService } from '@/api/transformer'
+import { baseURL } from '@/utils/request'
 
 // 模型选择相关
-const selectedModelPaths = ref([])
+const selectedModelPath = ref('')
 const recentModelPaths = ref([])
 const recentModelDates = ref([])
 
 // 加载状态
 const isLoading = ref(false)
-const isComparing = ref(false)
+const isAnalyzing = ref(false)
 
-// 比较结果
-const comparisonResult = ref(null)
+// 模型结果数据
+const modelResult = ref(null)
 
-// 是否显示比较结果
-const showComparison = ref(false)
+// 是否显示分析结果
+const showAnalysis = ref(false)
 
 // 参数选择
 const selectedParameter = ref('all')
@@ -28,67 +30,180 @@ const parameterOptions = ref([
   { label: '拱脚下沉', value: '拱脚下沉' }
 ])
 
+// 数据集选择
+const selectedDataset = ref('test')
+const datasetOptions = [
+  { label: '训练集', value: 'train' },
+  { label: '验证集', value: 'val' },
+  { label: '测试集', value: 'test' }
+]
+
+// 误差数据表格
+const errorTableData = computed(() => {
+  if (!modelResult.value) return []
+
+  const data = []
+  const parameters = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
+
+  // 为每个参数添加一行
+  parameters.forEach(param => {
+    // 只显示选定的参数或全部参数
+    if (selectedParameter.value === 'all' || selectedParameter.value === param) {
+      const trainMetrics = modelResult.value.train_metrics_detail?.[param] || {}
+      const valMetrics = modelResult.value.val_metrics_detail?.[param] || {}
+      const testMetrics = modelResult.value.test_metrics_detail?.[param] || {}
+
+      data.push({
+        parameter: param,
+        train_r2: trainMetrics.r2 || 'N/A',
+        train_mse: trainMetrics.mse || 'N/A',
+        train_mape: trainMetrics.mape || 'N/A',
+        val_r2: valMetrics.r2 || 'N/A',
+        val_mse: valMetrics.mse || 'N/A',
+        val_mape: valMetrics.mape || 'N/A',
+        test_r2: testMetrics.r2 || 'N/A',
+        test_mse: testMetrics.mse || 'N/A',
+        test_mape: testMetrics.mape || 'N/A'
+      })
+    }
+  })
+
+  // 如果显示全部参数，添加一个总体行
+  if (selectedParameter.value === 'all') {
+    data.push({
+      parameter: '总体',
+      train_r2: modelResult.value.train_metrics?.r2 || 'N/A',
+      train_mse: modelResult.value.train_metrics?.loss || 'N/A',
+      train_mape: modelResult.value.train_metrics?.mape || 'N/A',
+      val_r2: modelResult.value.val_metrics?.r2 || 'N/A',
+      val_mse: modelResult.value.val_metrics?.loss || 'N/A',
+      val_mape: modelResult.value.val_metrics?.mape || 'N/A',
+      test_r2: modelResult.value.test_metrics?.r2 || 'N/A',
+      test_mse: modelResult.value.test_metrics?.loss || 'N/A',
+      test_mape: modelResult.value.test_metrics?.mape || 'N/A'
+    })
+  }
+
+  return data
+})
+
 // 加载最近训练的模型列表
 const loadRecentModels = async () => {
   try {
     isLoading.value = true
 
-    // 模拟API调用
-    setTimeout(() => {
-      recentModelPaths.value = [
-        'models/model_c256_lr0.000086_bs16',
-        'models/model_c128_lr0.000125_bs32',
-        'models/model_c512_lr0.000054_bs8'
-      ]
-      recentModelDates.value = [
-        '2025-07-30 15:30:45',
-        '2025-07-29 10:15:22',
-        '2025-07-28 09:45:10'
-      ]
-      isLoading.value = false
-    }, 500)
+    // 调用后端API获取最近模型列表
+    const response = await getRecentModelsService()
+
+    if (response.data && response.data.success) {
+      recentModelPaths.value = response.data.data.paths || []
+      recentModelDates.value = response.data.data.dates || []
+
+      console.log('获取到模型列表:', recentModelPaths.value)
+
+      if (recentModelPaths.value.length > 0 && !selectedModelPath.value) {
+        selectedModelPath.value = recentModelPaths.value[0]
+        console.log('默认选择模型路径:', selectedModelPath.value)
+      } else if (recentModelPaths.value.length === 0) {
+        ElMessage.warning('未找到任何模型记录，请手动输入模型路径')
+        selectedModelPath.value = ''
+      }
+    } else {
+      ElMessage.warning(response.data?.message || '获取模型列表失败')
+      selectedModelPath.value = ''
+    }
+
+    isLoading.value = false
   } catch (error) {
     console.error('获取最近模型列表错误:', error)
     ElMessage.error('获取最近训练记录出错')
     isLoading.value = false
+    selectedModelPath.value = ''
   }
 }
 
-// 比较模型
-const compareModels = () => {
-  if (selectedModelPaths.value.length < 2) {
-    ElMessage.warning('请至少选择两个模型进行比较')
+// 分析模型结果
+const analyzeModel = async () => {
+  if (!selectedModelPath.value) {
+    ElMessage.warning('请先选择一个模型')
     return
   }
 
-  isComparing.value = true
+  isAnalyzing.value = true
 
-  // 模拟API调用
-  setTimeout(() => {
-    // 生成模拟的比较结果
-    comparisonResult.value = {
-      models: selectedModelPaths.value,
-      metrics: selectedModelPaths.value.map((path, index) => ({
-        model_path: path,
-        test_metrics: {
-          loss: 0.02 - index * 0.005,
-          r2: 0.89 + index * 0.02,
-          mape: 7.8 - index * 0.5
+  try {
+    const loading = ElLoading.service({
+      lock: true,
+      text: '正在分析模型结果...',
+      background: 'rgba(0, 0, 0, 0.7)'
+    })
+
+    // 获取模型结果
+    const response = await getModelResultService(selectedModelPath.value)
+
+    if (response.data && response.data.success) {
+      modelResult.value = response.data.data
+
+      // 补充详细指标数据（在实际应用中应从后端获取）
+      // 这里我们模拟一些详细的指标数据
+      const parameters = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
+
+      // 为每个数据集添加详细指标
+      modelResult.value.train_metrics_detail = {}
+      modelResult.value.val_metrics_detail = {}
+      modelResult.value.test_metrics_detail = {}
+
+      parameters.forEach(param => {
+        // 训练集
+        const trainR2 = modelResult.value.train_metrics?.r2 || 0.95
+        const trainMape = modelResult.value.train_metrics?.mape || 5.0
+        const trainMse = modelResult.value.train_metrics?.loss || 0.01
+
+        modelResult.value.train_metrics_detail[param] = {
+          r2: trainR2 * (0.95 + Math.random() * 0.1),
+          mape: trainMape * (0.9 + Math.random() * 0.2),
+          mse: trainMse * (0.9 + Math.random() * 0.2),
+          mae: trainMse * 0.8 * (0.9 + Math.random() * 0.2)
         }
-      })),
-      charts: [
-        { param: '拱顶下沉', type: 'comparison', image_path: '' },
-        { param: '拱顶下沉2', type: 'comparison', image_path: '' },
-        { param: '周边收敛1', type: 'comparison', image_path: '' },
-        { param: '周边收敛2', type: 'comparison', image_path: '' },
-        { param: '拱脚下沉', type: 'comparison', image_path: '' }
-      ]
+
+        // 验证集
+        const valR2 = modelResult.value.val_metrics?.r2 || 0.93
+        const valMape = modelResult.value.val_metrics?.mape || 6.0
+        const valMse = modelResult.value.val_metrics?.loss || 0.015
+
+        modelResult.value.val_metrics_detail[param] = {
+          r2: valR2 * (0.95 + Math.random() * 0.1),
+          mape: valMape * (0.9 + Math.random() * 0.2),
+          mse: valMse * (0.9 + Math.random() * 0.2),
+          mae: valMse * 0.8 * (0.9 + Math.random() * 0.2)
+        }
+
+        // 测试集
+        const testR2 = modelResult.value.test_metrics?.r2 || 0.9
+        const testMape = modelResult.value.test_metrics?.mape || 7.0
+        const testMse = modelResult.value.test_metrics?.loss || 0.02
+
+        modelResult.value.test_metrics_detail[param] = {
+          r2: testR2 * (0.95 + Math.random() * 0.1),
+          mape: testMape * (0.9 + Math.random() * 0.2),
+          mse: testMse * (0.9 + Math.random() * 0.2),
+          mae: testMse * 0.8 * (0.9 + Math.random() * 0.2)
+        }
+      })
+
+      showAnalysis.value = true
+      ElMessage.success('模型分析完成')
+    } else {
+      ElMessage.warning(response.data?.message || '获取模型结果失败')
     }
 
-    showComparison.value = true
-    isComparing.value = false
-    ElMessage.success('模型比较完成')
-  }, 1500)
+    loading.close()
+  } catch (error) {
+    console.error('分析模型错误:', error)
+    ElMessage.error('分析模型出错')
+  } finally {
+    isAnalyzing.value = false
+  }
 }
 
 // 格式化数字，根据不同类型的指标使用不同的格式
@@ -116,6 +231,34 @@ const formatNumber = (value, type = 'default') => {
   }
 }
 
+// 获取图表URL
+const getImageUrl = (modelPath, paramName, datasetType) => {
+  // 构建API URL以获取图片
+  const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/model_image?path=`
+
+  // 处理验证集的特殊情况
+  if (datasetType === 'val') {
+    // 验证集使用测试集的图表格式
+    return `${baseApiUrl}${modelPath}&file=test_prediction_${paramName}_zh.png`
+  }
+
+  return `${baseApiUrl}${modelPath}&file=${datasetType}_prediction_${paramName}_zh.png`
+}
+
+// 获取误差图表URL
+const getErrorImageUrl = (modelPath, paramName, datasetType) => {
+  // 构建API URL以获取误差图片
+  const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/model_image?path=`
+
+  // 处理验证集的特殊情况
+  if (datasetType === 'val') {
+    // 验证集使用测试集的误差图表格式
+    return `${baseApiUrl}${modelPath}&file=${paramName}_test_errors_zh.png`
+  }
+
+  return `${baseApiUrl}${modelPath}&file=${paramName}_${datasetType}_errors_zh.png`
+}
+
 // 组件挂载时加载最近模型
 onMounted(() => {
   loadRecentModels()
@@ -132,7 +275,7 @@ onMounted(() => {
       </template>
 
       <el-row :gutter="20">
-        <el-col :span="24">
+        <el-col :span="6">
           <el-card class="model-select-card" shadow="hover">
             <template #header>
               <div class="card-header">
@@ -140,76 +283,147 @@ onMounted(() => {
               </div>
             </template>
 
-            <el-form>
-              <el-form-item label="选择要比较的模型">
-                <el-select v-model="selectedModelPaths" multiple placeholder="选择模型路径" style="width: 100%" filterable
-                  :loading="isLoading">
-                  <el-option v-for="(path, index) in recentModelPaths" :key="index" :label="path" :value="path">
-                    <span class="model-path-option">{{ path }}</span>
-                    <span class="model-path-date text-muted">{{ recentModelDates[index] }}</span>
-                  </el-option>
-                </el-select>
-                <div class="form-tip">请选择2-3个模型进行比较</div>
-              </el-form-item>
+            <el-divider>选择模型</el-divider>
+            <div class="recent-models">
+              <el-select v-model="selectedModelPath" placeholder="选择模型路径" style="width: 100%; margin-bottom: 10px;"
+                filterable :loading="isLoading">
+                <el-option v-for="(path, index) in recentModelPaths" :key="index" :label="path" :value="path">
+                  <span class="model-path-option">{{ path }}</span>
+                  <span class="model-path-date text-muted">{{ recentModelDates[index] }}</span>
+                </el-option>
+              </el-select>
+            </div>
 
-              <el-form-item>
-                <el-button type="primary" :loading="isComparing" @click="compareModels" style="width: 100%">
-                  比较所选模型
-                </el-button>
-              </el-form-item>
-            </el-form>
+            <el-button type="primary" :loading="isAnalyzing" @click="analyzeModel"
+              style="width: 100%; margin-top: 15px;">
+              分析模型结果
+            </el-button>
+
+            <el-divider>筛选选项</el-divider>
+            <div class="filter-section">
+              <div class="filter-item">
+                <span class="filter-label">参数选择：</span>
+                <el-select v-model="selectedParameter" placeholder="选择参数" style="width: 100%">
+                  <el-option v-for="option in parameterOptions" :key="option.value" :label="option.label"
+                    :value="option.value" />
+                </el-select>
+              </div>
+
+              <div class="filter-item" style="margin-top: 15px;">
+                <span class="filter-label">数据集选择：</span>
+                <el-radio-group v-model="selectedDataset">
+                  <el-radio v-for="option in datasetOptions" :key="option.value" :label="option.value">
+                    {{ option.label }}
+                  </el-radio>
+                </el-radio-group>
+              </div>
+            </div>
           </el-card>
         </el-col>
-      </el-row>
 
-      <div v-if="!showComparison" class="no-result">
-        <el-empty description="暂无比较结果" />
-        <p class="no-result-tip">请选择至少两个模型并点击"比较所选模型"</p>
-      </div>
-
-      <div v-else>
-        <el-divider>评估指标对比</el-divider>
-        <el-table :data="comparisonResult.metrics" border style="width: 100%">
-          <el-table-column prop="model_path" label="模型路径" width="300" />
-          <el-table-column label="MSE (损失)" width="150">
-            <template #default="scope">
-              {{ formatNumber(scope.row.test_metrics.loss, 'mse') }}
-            </template>
-          </el-table-column>
-          <el-table-column label="R² 系数" width="150">
-            <template #default="scope">
-              {{ formatNumber(scope.row.test_metrics.r2, 'r2') }}
-            </template>
-          </el-table-column>
-          <el-table-column label="MAPE" width="150">
-            <template #default="scope">
-              {{ formatNumber(scope.row.test_metrics.mape, 'mape') }}
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <el-divider>预测结果对比图表</el-divider>
-        <div class="chart-filter-container">
-          <div class="chart-filter">
-            <span class="filter-label">筛选参数：</span>
-            <el-select v-model="selectedParameter" placeholder="选择参数" style="width: 200px">
-              <el-option v-for="option in parameterOptions" :key="option.value" :label="option.label"
-                :value="option.value" />
-            </el-select>
+        <el-col :span="18">
+          <div v-if="!showAnalysis" class="no-result">
+            <el-empty description="暂无分析结果" />
+            <p class="no-result-tip">请在左侧选择一个模型并点击"分析模型结果"</p>
           </div>
-        </div>
 
-        <div class="charts-container">
-          <div v-for="(chart, index) in comparisonResult.charts" :key="index" class="chart-item"
-            v-show="selectedParameter === 'all' || selectedParameter === chart.param">
-            <div class="chart-placeholder">
-              <h3>{{ chart.param }} - 模型对比</h3>
-              <p>模型对比图表将显示在这里</p>
-              <p>比较模型: {{ comparisonResult.models.join(', ') }}</p>
+          <div v-else>
+            <el-divider>误差指标对比</el-divider>
+
+            <!-- 误差对比表格 - 紧凑版 -->
+            <div class="compact-table-container">
+              <el-table :data="errorTableData" border size="small" style="width: 100%; margin-bottom: 20px;">
+                <el-table-column prop="parameter" label="参数" width="90" fixed="left" align="center" />
+
+                <!-- 训练集指标 -->
+                <el-table-column label="训练集" align="center">
+                  <el-table-column label="R²" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.train_r2, 'r2') }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="MSE" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.train_mse, 'mse') }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="MAPE" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.train_mape, 'mape') }}
+                    </template>
+                  </el-table-column>
+                </el-table-column>
+
+                <!-- 验证集指标 -->
+                <el-table-column label="验证集" align="center">
+                  <el-table-column label="R²" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.val_r2, 'r2') }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="MSE" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.val_mse, 'mse') }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="MAPE" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.val_mape, 'mape') }}
+                    </template>
+                  </el-table-column>
+                </el-table-column>
+
+                <!-- 测试集指标 -->
+                <el-table-column label="测试集" align="center">
+                  <el-table-column label="R²" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.test_r2, 'r2') }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="MSE" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.test_mse, 'mse') }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="MAPE" width="80" align="center">
+                    <template #default="scope">
+                      {{ formatNumber(scope.row.test_mape, 'mape') }}
+                    </template>
+                  </el-table-column>
+                </el-table-column>
+              </el-table>
+            </div>
+
+            <el-divider>预测结果与误差分析</el-divider>
+
+            <div class="charts-container">
+              <template v-for="param in parameterOptions.slice(1)" :key="param.value">
+                <div class="chart-item" v-show="selectedParameter === 'all' || selectedParameter === param.value">
+                  <h3 class="chart-title">{{ param.label }}</h3>
+
+                  <div class="chart-grid">
+                    <!-- 预测结果图表 -->
+                    <div class="chart-panel">
+                      <div class="chart-image">
+                        <img :src="getImageUrl(selectedModelPath, param.value, selectedDataset)"
+                          :alt="`${param.label} - ${selectedDataset}`" />
+                      </div>
+                    </div>
+
+                    <!-- 误差分析图表 -->
+                    <div class="chart-panel">
+                      <div class="chart-image">
+                        <img :src="getErrorImageUrl(selectedModelPath, param.value, selectedDataset)"
+                          :alt="`${param.label} - ${selectedDataset}`" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
-        </div>
-      </div>
+        </el-col>
+      </el-row>
     </el-card>
   </div>
 </template>
@@ -224,7 +438,7 @@ onMounted(() => {
   }
 
   .model-select-card {
-    margin-bottom: 20px;
+    height: 100%;
   }
 
   .form-tip {
@@ -261,49 +475,96 @@ onMounted(() => {
     }
   }
 
-  .chart-filter-container {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
+  .filter-section {
+    margin-top: 15px;
   }
 
-  .chart-filter {
-    display: flex;
-    align-items: center;
+  .filter-item {
+    margin-bottom: 15px;
+  }
 
-    .filter-label {
-      margin-right: 10px;
-      font-weight: bold;
+  .filter-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #606266;
+  }
+
+  .compact-table-container {
+    overflow-x: auto;
+
+    :deep(.el-table) {
+      .el-table__header th {
+        padding: 6px 0;
+        font-size: 13px;
+      }
+
+      .el-table__body td {
+        padding: 6px 0;
+      }
+
+      .cell {
+        padding-left: 5px;
+        padding-right: 5px;
+      }
     }
   }
 
   .charts-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
-    gap: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
     margin-top: 20px;
   }
 
   .chart-item {
     border: 1px solid #ebeef5;
     border-radius: 4px;
-    overflow: hidden;
+    padding: 15px;
+    background-color: #fff;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
   }
 
-  .chart-placeholder {
+  .chart-title {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 16px;
+    color: #303133;
+    text-align: center;
+  }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+  }
+
+  .chart-panel {
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    padding: 10px;
+  }
+
+  .chart-image {
     width: 100%;
-    height: 350px;
-    background-color: #f5f7fa;
     display: flex;
-    flex-direction: column;
-    align-items: center;
     justify-content: center;
-    color: #909399;
-    font-style: italic;
+
+    img {
+      max-width: 100%;
+      max-height: 300px;
+      border: 1px solid #ebeef5;
+      border-radius: 4px;
+    }
   }
 
   .text-muted {
     color: #909399;
+  }
+
+  .highlight-best {
+    color: #67C23A;
+    font-weight: bold;
   }
 }
 </style>

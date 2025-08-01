@@ -45,6 +45,23 @@ export function getDatasetsService() {
   })
 }
 
+// 获取历史数据集列表
+export function getDatasetHistoryService() {
+  return request({
+    url: '/transformer/dataset_history',
+    method: 'get'
+  })
+}
+
+// 获取数据集详情
+export function getDatasetDetailService(datasetId) {
+  return request({
+    url: '/transformer/dataset_detail',
+    method: 'get',
+    params: { id: datasetId }
+  })
+}
+
 // 训练模型
 export function trainModelService(data) {
   return request({
