@@ -21,6 +21,14 @@ const router = createRouter({
           component: () => import('@/views/visual/VisualChart.vue')
         },
         {
+          path: '/visual/compare',
+          component: () => import('@/views/visual/VisualCompare.vue')
+        },
+        {
+          path: '/visual/history',
+          component: () => import('@/views/visual/VisualHistory.vue')
+        },
+        {
           path: '/param/optimization',
           component: () => import('@/views/param/ParamOptimization.vue')
         },

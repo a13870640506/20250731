@@ -1,112 +1,211 @@
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElLoading } from 'element-plus'
+
+// 模型选择相关
+const selectedModelPaths = ref([])
+const recentModelPaths = ref([])
+const recentModelDates = ref([])
+
+// 加载状态
+const isLoading = ref(false)
+const isComparing = ref(false)
+
+// 比较结果
+const comparisonResult = ref(null)
+
+// 是否显示比较结果
+const showComparison = ref(false)
+
+// 参数选择
+const selectedParameter = ref('all')
+const parameterOptions = ref([
+  { label: '全部参数', value: 'all' },
+  { label: '拱顶下沉', value: '拱顶下沉' },
+  { label: '拱顶下沉2', value: '拱顶下沉2' },
+  { label: '周边收敛1', value: '周边收敛1' },
+  { label: '周边收敛2', value: '周边收敛2' },
+  { label: '拱脚下沉', value: '拱脚下沉' }
+])
+
+// 加载最近训练的模型列表
+const loadRecentModels = async () => {
+  try {
+    isLoading.value = true
+
+    // 模拟API调用
+    setTimeout(() => {
+      recentModelPaths.value = [
+        'models/model_c256_lr0.000086_bs16',
+        'models/model_c128_lr0.000125_bs32',
+        'models/model_c512_lr0.000054_bs8'
+      ]
+      recentModelDates.value = [
+        '2025-07-30 15:30:45',
+        '2025-07-29 10:15:22',
+        '2025-07-28 09:45:10'
+      ]
+      isLoading.value = false
+    }, 500)
+  } catch (error) {
+    console.error('获取最近模型列表错误:', error)
+    ElMessage.error('获取最近训练记录出错')
+    isLoading.value = false
+  }
+}
+
+// 比较模型
+const compareModels = () => {
+  if (selectedModelPaths.value.length < 2) {
+    ElMessage.warning('请至少选择两个模型进行比较')
+    return
+  }
+
+  isComparing.value = true
+
+  // 模拟API调用
+  setTimeout(() => {
+    // 生成模拟的比较结果
+    comparisonResult.value = {
+      models: selectedModelPaths.value,
+      metrics: selectedModelPaths.value.map((path, index) => ({
+        model_path: path,
+        test_metrics: {
+          loss: 0.02 - index * 0.005,
+          r2: 0.89 + index * 0.02,
+          mape: 7.8 - index * 0.5
+        }
+      })),
+      charts: [
+        { param: '拱顶下沉', type: 'comparison', image_path: '' },
+        { param: '拱顶下沉2', type: 'comparison', image_path: '' },
+        { param: '周边收敛1', type: 'comparison', image_path: '' },
+        { param: '周边收敛2', type: 'comparison', image_path: '' },
+        { param: '拱脚下沉', type: 'comparison', image_path: '' }
+      ]
+    }
+
+    showComparison.value = true
+    isComparing.value = false
+    ElMessage.success('模型比较完成')
+  }, 1500)
+}
+
+// 格式化数字，根据不同类型的指标使用不同的格式
+const formatNumber = (value, type = 'default') => {
+  if (value === undefined || value === null) return 'N/A'
+
+  // 将字符串转换为数字
+  if (typeof value === 'string') {
+    value = parseFloat(value)
+  }
+
+  // 如果不是数字，返回原值
+  if (isNaN(value)) return value
+
+  // 根据类型格式化
+  switch (type) {
+    case 'mse': // MSE保留5位小数
+      return value.toFixed(5)
+    case 'r2': // R2显示为百分比，保留2位小数
+      return (value * 100).toFixed(2) + '%'
+    case 'mape': // MAPE已经是百分比，保留2位小数
+      return value.toFixed(2) + '%'
+    default:
+      return value.toFixed(6)
+  }
+}
+
+// 组件挂载时加载最近模型
+onMounted(() => {
+  loadRecentModels()
+})
+</script>
+
 <template>
   <div class="visual-compare">
-    <el-card class="compare-card">
+    <el-card>
       <template #header>
         <div class="card-header">
           <span>结果对比</span>
         </div>
       </template>
 
-      <div class="content-container">
-        <!-- 左侧结果列表 -->
-        <div class="result-list">
-          <h3>预测结果列表</h3>
-          <el-input v-model="searchQuery" placeholder="搜索结果..." prefix-icon="el-icon-search" clearable
-            class="search-input" />
-
-          <el-scrollbar height="500px">
-            <div v-if="loading" class="loading-container">
-              <el-skeleton :rows="5" animated />
-            </div>
-            <div v-else-if="filteredResults.length === 0" class="empty-container">
-              <el-empty description="暂无预测结果" />
-            </div>
-            <div v-else class="result-items">
-              <div v-for="result in filteredResults" :key="result.id" class="result-item"
-                :class="{ 'active': selectedResult && selectedResult.id === result.id }" @click="selectResult(result)">
-                <div class="result-item-header">
-                  <span class="result-name">{{ result.model_name }}</span>
-                  <el-tag size="small" type="info">{{ formatTimestamp(result.timestamp) }}</el-tag>
-                </div>
-                <div class="result-item-path">{{ result.path }}</div>
+      <el-row :gutter="20">
+        <el-col :span="24">
+          <el-card class="model-select-card" shadow="hover">
+            <template #header>
+              <div class="card-header">
+                <span>模型选择</span>
               </div>
-            </div>
-          </el-scrollbar>
+            </template>
+
+            <el-form>
+              <el-form-item label="选择要比较的模型">
+                <el-select v-model="selectedModelPaths" multiple placeholder="选择模型路径" style="width: 100%" filterable
+                  :loading="isLoading">
+                  <el-option v-for="(path, index) in recentModelPaths" :key="index" :label="path" :value="path">
+                    <span class="model-path-option">{{ path }}</span>
+                    <span class="model-path-date text-muted">{{ recentModelDates[index] }}</span>
+                  </el-option>
+                </el-select>
+                <div class="form-tip">请选择2-3个模型进行比较</div>
+              </el-form-item>
+
+              <el-form-item>
+                <el-button type="primary" :loading="isComparing" @click="compareModels" style="width: 100%">
+                  比较所选模型
+                </el-button>
+              </el-form-item>
+            </el-form>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <div v-if="!showComparison" class="no-result">
+        <el-empty description="暂无比较结果" />
+        <p class="no-result-tip">请选择至少两个模型并点击"比较所选模型"</p>
+      </div>
+
+      <div v-else>
+        <el-divider>评估指标对比</el-divider>
+        <el-table :data="comparisonResult.metrics" border style="width: 100%">
+          <el-table-column prop="model_path" label="模型路径" width="300" />
+          <el-table-column label="MSE (损失)" width="150">
+            <template #default="scope">
+              {{ formatNumber(scope.row.test_metrics.loss, 'mse') }}
+            </template>
+          </el-table-column>
+          <el-table-column label="R² 系数" width="150">
+            <template #default="scope">
+              {{ formatNumber(scope.row.test_metrics.r2, 'r2') }}
+            </template>
+          </el-table-column>
+          <el-table-column label="MAPE" width="150">
+            <template #default="scope">
+              {{ formatNumber(scope.row.test_metrics.mape, 'mape') }}
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <el-divider>预测结果对比图表</el-divider>
+        <div class="chart-filter-container">
+          <div class="chart-filter">
+            <span class="filter-label">筛选参数：</span>
+            <el-select v-model="selectedParameter" placeholder="选择参数" style="width: 200px">
+              <el-option v-for="option in parameterOptions" :key="option.value" :label="option.label"
+                :value="option.value" />
+            </el-select>
+          </div>
         </div>
 
-        <!-- 右侧结果详情 -->
-        <div class="result-detail">
-          <div v-if="!selectedResult" class="no-selection">
-            <el-empty description="请从左侧选择预测结果" />
-          </div>
-          <div v-else-if="loadingDetail" class="loading-container">
-            <el-skeleton :rows="10" animated />
-          </div>
-          <div v-else class="detail-content">
-            <!-- 评估指标 -->
-            <div class="metrics-summary">
-              <el-row :gutter="30">
-                <el-col :span="8">
-                  <div class="metric-item">
-                    <div class="metric-label">均方误差 (MSE):</div>
-                    <div class="metric-value-inline">{{ resultDetail.metrics?.mse ?
-                      formatScientificNumber(resultDetail.metrics.mse) : 'N/A' }}</div>
-                  </div>
-                </el-col>
-                <el-col :span="8">
-                  <div class="metric-item">
-                    <div class="metric-label">均方根误差 (RMSE):</div>
-                    <div class="metric-value-inline">{{ resultDetail.metrics?.rmse ?
-                      formatScientificNumber(resultDetail.metrics.rmse) : 'N/A' }}</div>
-                  </div>
-                </el-col>
-                <el-col :span="8">
-                  <div class="metric-item">
-                    <div class="metric-label">决定系数 (R2):</div>
-                    <div class="metric-value-inline">{{ resultDetail.metrics?.r2 ? resultDetail.metrics.r2.toFixed(7) :
-                      'N/A'
-                      }}</div>
-                  </div>
-                </el-col>
-              </el-row>
-            </div>
-
-            <!-- 数据表格 -->
-            <div class="data-table">
-              <h3>预测结果数据对比 <span class="total-count">(共 {{ resultDetail.total_rows || 0 }} 行)</span></h3>
-
-              <el-table :data="resultDetail.results || []" stripe border style="width: 100%" height="550"
-                :header-cell-style="{ background: '#f5f7fa', color: '#606266', fontWeight: 'bold' }">
-                <el-table-column type="index" label="序号" width="80" align="center" />
-                <el-table-column prop="predicted" label="预测值" align="center">
-                  <template #default="scope">
-                    <span>{{ formatNumber(scope.row.predicted) }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="actual" label="真实值" align="center">
-                  <template #default="scope">
-                    <span>{{ formatNumber(scope.row.actual) }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="误差" align="center">
-                  <template #default="scope">
-                    <span :class="getErrorClass(scope.row.predicted, scope.row.actual)">
-                      {{ formatError(scope.row.predicted, scope.row.actual) }}
-                    </span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="相对误差 (%)" align="center">
-                  <template #default="scope">
-                    <span :class="getErrorClass(scope.row.predicted, scope.row.actual)">
-                      {{ formatRelativeError(scope.row.predicted, scope.row.actual) }}
-                    </span>
-                  </template>
-                </el-table-column>
-              </el-table>
-
-              <div class="table-footer">
-                <p class="table-note">显示所有数据</p>
-              </div>
+        <div class="charts-container">
+          <div v-for="(chart, index) in comparisonResult.charts" :key="index" class="chart-item"
+            v-show="selectedParameter === 'all' || selectedParameter === chart.param">
+            <div class="chart-placeholder">
+              <h3>{{ chart.param }} - 模型对比</h3>
+              <p>模型对比图表将显示在这里</p>
+              <p>比较模型: {{ comparisonResult.models.join(', ') }}</p>
             </div>
           </div>
         </div>
@@ -115,316 +214,96 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { getPredictionResultsService, getPredictionResultService } from '@/api/transformer'
-
-// 响应式数据
-const results = ref([])
-const selectedResult = ref(null)
-const resultDetail = ref({})
-const loading = ref(false)
-const loadingDetail = ref(false)
-const searchQuery = ref('')
-
-// 过滤结果列表
-const filteredResults = computed(() => {
-  if (!searchQuery.value) return results.value
-
-  const query = searchQuery.value.toLowerCase()
-  return results.value.filter(result =>
-    result.name.toLowerCase().includes(query) ||
-    result.model_name.toLowerCase().includes(query)
-  )
-})
-
-// 格式化时间戳
-const formatTimestamp = (timestamp) => {
-  if (!timestamp) return ''
-
-  // 格式: 20250720_231034 -> 2025-07-20 23:10:34
-  const year = timestamp.substring(0, 4)
-  const month = timestamp.substring(4, 6)
-  const day = timestamp.substring(6, 8)
-  const hour = timestamp.substring(9, 11)
-  const minute = timestamp.substring(11, 13)
-  const second = timestamp.substring(13, 15)
-
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-// 格式化科学计数
-const formatScientificNumber = (num) => {
-  if (num === null || num === undefined) return 'N/A'
-
-  // 如果数值很小（小于0.0001），使用科学计数法
-  if (Math.abs(num) < 0.0001) {
-    return num.toExponential(7)
-  }
-  // 否则使用固定小数位
-  return num.toFixed(7)
-}
-
-// 格式化数字
-const formatNumber = (num) => {
-  if (num === null || num === undefined) return 'N/A'
-  return num.toFixed(7)
-}
-
-// 计算误差
-const formatError = (predicted, actual) => {
-  if (predicted === null || actual === null || predicted === undefined || actual === undefined) {
-    return 'N/A'
-  }
-
-  const error = predicted - actual
-  return error.toFixed(7)
-}
-
-// 计算相对误差
-const formatRelativeError = (predicted, actual) => {
-  if (predicted === null || actual === null || predicted === undefined || actual === undefined || actual === 0) {
-    return 'N/A'
-  }
-
-  const relativeError = Math.abs((predicted - actual) / actual) * 100
-  return relativeError.toFixed(2)
-}
-
-// 获取误差样式类
-const getErrorClass = (predicted, actual) => {
-  if (predicted === null || actual === null || predicted === undefined || actual === undefined) {
-    return ''
-  }
-
-  const error = Math.abs(predicted - actual)
-  const relativeError = actual !== 0 ? Math.abs(error / actual) : 0
-
-  if (relativeError > 0.1) {
-    return 'error-high'
-  } else if (relativeError > 0.05) {
-    return 'error-medium'
-  } else {
-    return 'error-low'
-  }
-}
-
-// 选择结果
-const selectResult = async (result) => {
-  selectedResult.value = result
-  await fetchResultDetail(result.id)
-}
-
-// 获取预测结果列表
-const fetchResults = async () => {
-  loading.value = true
-  try {
-    const res = await getPredictionResultsService()
-    if (res.data && res.data.success) {
-      results.value = res.data.data || []
-    } else {
-      ElMessage.error(res.data?.message || '获取预测结果列表失败')
-    }
-  } catch (error) {
-    console.error('获取预测结果列表错误:', error)
-    ElMessage.error(`获取预测结果列表失败: ${error.message}`)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 获取预测结果详情
-const fetchResultDetail = async (resultId) => {
-  loadingDetail.value = true
-  resultDetail.value = {}
-
-  try {
-    const res = await getPredictionResultService(resultId)
-    if (res.data && res.data.success) {
-      resultDetail.value = res.data.data || {}
-    } else {
-      ElMessage.error(res.data?.message || '获取预测结果详情失败')
-    }
-  } catch (error) {
-    console.error('获取预测结果详情错误:', error)
-    ElMessage.error(`获取预测结果详情失败: ${error.message}`)
-  } finally {
-    loadingDetail.value = false
-  }
-}
-
-// 组件挂载时获取数据
-onMounted(() => {
-  fetchResults()
-})
-</script>
-
 <style scoped lang="scss">
 .visual-compare {
-  padding: 20px;
+  padding: 15px;
 
-  .compare-card {
-    min-height: 600px;
+  .card-header {
+    font-size: 18px;
+    font-weight: bold;
+  }
 
-    .card-header {
-      font-size: 18px;
-      font-weight: bold;
-    }
+  .model-select-card {
+    margin-bottom: 20px;
+  }
 
-    .content-container {
-      display: flex;
-      gap: 20px;
-      min-height: 550px;
+  .form-tip {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #909399;
+    font-style: italic;
+  }
 
-      .result-list {
-        flex: 0 0 300px;
-        border-right: 1px solid #ebeef5;
-        padding-right: 20px;
+  .model-path-option {
+    display: inline-block;
+    width: 70%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-        h3 {
-          margin-top: 0;
-          margin-bottom: 15px;
-          font-size: 16px;
-        }
+  .model-path-date {
+    float: right;
+    color: #909399;
+    font-size: 12px;
+  }
 
-        .search-input {
-          margin-bottom: 15px;
-        }
+  .no-result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 400px;
 
-        .result-items {
-          .result-item {
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            cursor: pointer;
-            border: 1px solid #ebeef5;
-            transition: all 0.3s;
-
-            &:hover {
-              background-color: #f5f7fa;
-            }
-
-            &.active {
-              background-color: #ecf5ff;
-              border-color: #409eff;
-            }
-
-            .result-item-header {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 5px;
-
-              .result-name {
-                font-weight: bold;
-                font-size: 14px;
-              }
-            }
-
-            .result-item-path {
-              font-size: 12px;
-              color: #909399;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            }
-          }
-        }
-      }
-
-      .result-detail {
-        flex: 1;
-
-        .no-selection {
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .detail-content {
-          .metrics-summary {
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-
-            .metric-item {
-              display: flex;
-              flex-direction: column;
-              padding: 8px 0;
-              max-width: 100%;
-
-              .metric-label {
-                font-weight: bold;
-                color: #606266;
-                margin-bottom: 5px;
-                white-space: nowrap;
-                width: 100%;
-              }
-
-              .metric-value-inline {
-                font-weight: bold;
-                color: #409EFF;
-                text-align: center;
-                padding: 5px;
-                background-color: #f0f7ff;
-                border-radius: 4px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              }
-            }
-          }
-
-          .data-table {
-            h3 {
-              margin-top: 0;
-              margin-bottom: 15px;
-              font-size: 16px;
-
-              .total-count {
-                font-size: 14px;
-                color: #909399;
-                font-weight: normal;
-              }
-            }
-
-            .table-footer {
-              margin-top: 10px;
-
-              .table-note {
-                font-size: 12px;
-                color: #909399;
-                font-style: italic;
-              }
-            }
-
-            :deep(.error-high) {
-              color: #f56c6c;
-            }
-
-            :deep(.error-medium) {
-              color: #e6a23c;
-            }
-
-            :deep(.error-low) {
-              color: #67c23a;
-            }
-          }
-        }
-      }
+    .no-result-tip {
+      margin-top: 20px;
+      color: #909399;
     }
   }
 
-  .loading-container,
-  .empty-container {
-    padding: 20px;
+  .chart-filter-container {
     display: flex;
     justify-content: center;
+    margin: 20px 0;
+  }
+
+  .chart-filter {
+    display: flex;
     align-items: center;
-    min-height: 200px;
+
+    .filter-label {
+      margin-right: 10px;
+      font-weight: bold;
+    }
+  }
+
+  .charts-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  .chart-item {
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .chart-placeholder {
+    width: 100%;
+    height: 350px;
+    background-color: #f5f7fa;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #909399;
+    font-style: italic;
+  }
+
+  .text-muted {
+    color: #909399;
   }
 }
 </style>

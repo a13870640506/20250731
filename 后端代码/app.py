@@ -484,24 +484,26 @@ def get_model_result():
         
         print(f"正在获取模型结果，路径: {model_path}")
         
-        full_path = os.path.join(MODEL_DIR, model_path)
-        print(f"完整路径: {full_path}")
+        print(f"模型路径请求: {model_path}")
+        
+        # 如果路径是 models/model_xxx 格式，则直接在 MODEL_DIR/models 下查找
+        if model_path.startswith('models/model_'):
+            # 从 models/model_xxx 提取 model_xxx 部分
+            model_name = model_path.split('/', 1)[1]
+            full_path = os.path.join(MODEL_DIR, 'models', model_name)
+        else:
+            # 否则直接使用完整路径
+            full_path = os.path.join(MODEL_DIR, model_path)
+            
+        print(f"构建的完整模型路径: {full_path}")
         
         # 检查路径是否存在
         if not os.path.exists(full_path):
-            print(f"路径不存在: {full_path}")
-            # 尝试在models目录下查找
-            alt_path = os.path.join(MODEL_DIR, 'models', model_path.replace('models/', ''))
-            print(f"尝试替代路径: {alt_path}")
-            
-            if os.path.exists(alt_path):
-                full_path = alt_path
-                print(f"使用替代路径: {full_path}")
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': f'模型路径不存在: {model_path}'
-                })
+            print(f"模型路径不存在: {full_path}")
+            return jsonify({
+                'success': False,
+                'message': f'模型路径不存在: {model_path}'
+            })
         
         # 尝试加载模型结果
         result = {}
@@ -754,6 +756,58 @@ def download_file():
         return jsonify({
             'success': False,
             'message': f'文件下载失败: {str(e)}'
+        }), 500
+
+# 获取模型图片接口
+@app.route('/transformer/model_image', methods=['GET'])
+def get_model_image():
+    try:
+        image_path = request.args.get('path')
+        if not image_path:
+            return jsonify({
+                'success': False,
+                'message': '请提供图片路径'
+            }), 400
+        
+        # 移除开头的斜杠
+        if image_path.startswith('/'):
+            image_path = image_path[1:]
+            
+        print(f"图片路径请求: {image_path}")
+        
+        # 如果路径是 models/model_xxx 格式，则直接在 MODEL_DIR/models 下查找
+        if image_path.startswith('models/model_'):
+            # 从 models/model_xxx 提取 model_xxx 部分
+            model_name = image_path.split('/', 1)[1]
+            full_path = os.path.join(MODEL_DIR, 'models', model_name)
+        else:
+            # 否则直接使用完整路径
+            full_path = os.path.join(MODEL_DIR, image_path)
+            
+        print(f"构建的完整图片路径: {full_path}")
+        
+        # 检查路径是否存在
+        if not os.path.exists(full_path):
+            print(f"图片路径不存在: {full_path}")
+            return jsonify({
+                'success': False,
+                'message': f'图片不存在: {image_path}'
+            }), 404
+            
+        # 检查是否为图片文件
+        if not full_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            return jsonify({
+                'success': False,
+                'message': '不支持的文件类型'
+            }), 400
+            
+        # 返回图片文件
+        return send_file(full_path, mimetype=f'image/{os.path.splitext(full_path)[1][1:]}')
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'获取图片失败: {str(e)}'
         }), 500
 
 

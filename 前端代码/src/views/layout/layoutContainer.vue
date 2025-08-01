@@ -63,12 +63,23 @@ const currentIp = ipMatch ? ipMatch[0] : "未连接";
                     </el-icon>
                     <span>隧道位移预测</span>
                 </el-menu-item>
-                <el-menu-item index="/visual/chart">
-                    <el-icon>
-                        <TrendCharts />
-                    </el-icon>
-                    <span>数据可视化</span>
-                </el-menu-item>
+                <el-sub-menu index="/visual">
+                    <template #title>
+                        <el-icon>
+                            <TrendCharts />
+                        </el-icon>
+                        <span>数据可视化</span>
+                    </template>
+                    <el-menu-item index="/visual/chart">
+                        <span>训练结果详情</span>
+                    </el-menu-item>
+                    <el-menu-item index="/visual/compare">
+                        <span>结果对比</span>
+                    </el-menu-item>
+                    <el-menu-item index="/visual/history">
+                        <span>历史数据集</span>
+                    </el-menu-item>
+                </el-sub-menu>
                 <el-menu-item index="/help/about">
                     <el-icon>
                         <InfoFilled />

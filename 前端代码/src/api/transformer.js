@@ -1,111 +1,81 @@
 import request from '@/utils/request'
 
-// 训练模型API
-export const trainModelService = (data) => {
-  return request({
-    url: '/transformer/train',
-    method: 'post',
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    },
-    data
-  })
-}
-
-// 预测API
-export const predictService = (data) => {
-  return request({
-    url: '/transformer/predict',
-    method: 'post',
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    },
-    data
-  })
-}
-
-// 上传数据集API
-export const uploadDatasetService = (data) => {
+// 数据集上传和处理
+export function uploadDatasetService(data) {
   return request({
     url: '/transformer/upload',
     method: 'post',
+    data,
     headers: {
       'Content-Type': 'multipart/form-data'
-    },
-    data
+    }
   })
 }
 
-// 超参数优化API
-export const optimizeParamsService = (data) => {
-  return request({
-    url: '/transformer/optimize',
-    method: 'post',
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    },
-    data
-  })
-}
-
-// 获取优化历史记录API
-export const getOptimizationHistoryService = () => {
-  return request({
-    url: '/transformer/optimization_history',
-    method: 'get'
-  })
-}
-
-// 获取优化结果详情API
-export const getOptimizationResultService = (optId) => {
-  return request({
-    url: `/transformer/optimization_result/${optId}`,
-    method: 'get'
-  })
-}
-
-// 获取数据可视化图表API
-export const getChartDataService = (data) => {
-  return request({
-    url: '/transformer/visualize',
-    method: 'post',
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    },
-    data
-  })
-}
-
-// 获取模型评估指标API
-export const getModelMetricsService = (modelPath) => {
-  return request({
-    url: '/transformer/model_metrics',
-    method: 'get',
-    params: { model_path: modelPath }
-  })
-}
-
-// 获取数据集列表API
-export const getDatasetsService = () => {
-  return request({
-    url: '/transformer/datasets',
-    method: 'get'
-  })
-}
-
-// 获取最近训练的模型列表API
-export const getRecentModelsService = () => {
+// 获取最近训练的模型列表
+export function getRecentModelsService() {
   return request({
     url: '/transformer/recent_models',
     method: 'get'
   })
 }
 
-// 获取指定模型路径的训练结果API
-export const getModelResultService = (modelPath) => {
+// 获取模型结果
+export function getModelResultService(modelPath) {
   return request({
     url: '/transformer/model_result',
     method: 'get',
     params: { model_path: modelPath }
   })
-} 
+}
+
+// 获取数据集列表
+export function getDatasetsService() {
+  return request({
+    url: '/transformer/datasets',
+    method: 'get'
+  })
+}
+
+// 训练模型
+export function trainModelService(data) {
+  return request({
+    url: '/transformer/train',
+    method: 'post',
+    data
+  })
+}
+
+// 模型预测
+export function predictService(data) {
+  return request({
+    url: '/transformer/predict',
+    method: 'post',
+    data
+  })
+}
+
+// 超参数优化
+export function optimizeParamsService(data) {
+  return request({
+    url: '/transformer/optimize',
+    method: 'post',
+    data
+  })
+}
+
+// 获取优化历史记录
+export function getOptimizationHistoryService() {
+  return request({
+    url: '/transformer/optimization_history',
+    method: 'get'
+  })
+}
+
+// 获取优化结果详情
+export function getOptimizationResultService(optId) {
+  return request({
+    url: `/transformer/optimization_result/${optId}`,
+    method: 'get'
+  })
+}
