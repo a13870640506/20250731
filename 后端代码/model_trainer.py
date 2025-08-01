@@ -528,8 +528,10 @@ class ModelTrainer:
         except Exception as e:
             print(f"保存training_params.json时出错: {str(e)}")
         
-        # 返回训练结果
+        # 返回训练结果，同时提供模型目录的相对路径，方便前端直接访问
+        relative_dir = os.path.relpath(model_save_dir, self.model_dir)
         return {
+            'model_dir': relative_dir,
             'model_path': best_model_path,
             'train_metrics': simple_train_metrics,
             'val_metrics': simple_val_metrics,

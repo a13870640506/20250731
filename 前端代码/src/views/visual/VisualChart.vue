@@ -121,11 +121,11 @@ const loadModelResult = async (modelPath) => {
           param: param,
           images: {
             prediction: {
-              train: baseUrl + param + '_train_prediction_zh.png',
-              test: baseUrl + param + '_test_prediction_zh.png'
+              train: baseUrl + 'train_prediction_' + param + '_zh.png',
+              test: baseUrl + 'test_prediction_' + param + '_zh.png'
             },
             combined: {
-              all: baseUrl + param + '_combined_prediction_zh.png'
+              all: baseUrl + 'combined_prediction_' + param + '_zh.png'
             },
             error: {
               train: baseUrl + param + '_train_errors_zh.png',

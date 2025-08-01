@@ -422,6 +422,12 @@ const startTraining = async (fromParamTab) => {
         trainingResult.value = res.data.data
         showTrainingResult.value = true
 
+
+        // 如果后端返回模型目录，自动选中该路径
+        if (trainingResult.value.model_dir) {
+          selectedModelPath.value = trainingResult.value.model_dir
+        }
+
         // 训练成功后，刷新最近模型列表
         loadRecentModels()
       } else {
