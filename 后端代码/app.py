@@ -30,7 +30,7 @@ os.makedirs(SCALER_DIR, exist_ok=True)
 
 # 创建各模块处理器
 data_processor = DataProcessor(data_dir=DATA_DIR, scaler_dir=SCALER_DIR)
-model_trainer = ModelTrainer(model_dir=MODEL_DIR)
+model_trainer = ModelTrainer(model_dir=MODEL_DIR, scaler_dir=SCALER_DIR)
 model_optimizer = ModelOptimizer(model_dir=MODEL_DIR)
 
 

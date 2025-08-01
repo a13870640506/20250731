@@ -42,12 +42,14 @@ plt.rcParams.update({
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class ModelTrainer:
-    def __init__(self, model_dir='./models'):
+    def __init__(self, model_dir='./models', scaler_dir='./scalers'):
         """初始化模型训练器"""
         self.model_dir = model_dir
+        self.scaler_dir = scaler_dir
 
         # 创建目录
         os.makedirs(self.model_dir, exist_ok=True)
+        os.makedirs(self.scaler_dir, exist_ok=True)
 
     def train(self, data_path, model_name='transformer', epochs=300, batch_size=16,
               learning_rate=0.0001, weight_decay=0.0001, dropout=0.05,
@@ -306,6 +308,18 @@ class ModelTrainer:
         train_loss_eval, train_preds, train_labels = validate_model(model, train_loader, criterion)
         val_loss_eval, val_preds, val_labels = validate_model(model, val_loader, criterion)
         test_loss_eval, test_preds, test_labels = validate_model(model, test_loader, criterion)
+
+        # 反标准化预测结果和标签，确保评估指标与绘图一致
+        try:
+            _, output_scaler = joblib.load(os.path.join(self.scaler_dir, 'scalers.pkl'))
+            train_preds = output_scaler.inverse_transform(train_preds)
+            val_preds = output_scaler.inverse_transform(val_preds)
+            test_preds = output_scaler.inverse_transform(test_preds)
+            train_labels = output_scaler.inverse_transform(train_labels)
+            val_labels = output_scaler.inverse_transform(val_labels)
+            test_labels = output_scaler.inverse_transform(test_labels)
+        except Exception as e:
+            print(f"反标准化失败: {e}, 指标将基于标准化数据计算")
 
         # 计算各数据集的评估指标
         train_metrics_list = self._calculate_metrics(train_labels, train_preds, param_names)
