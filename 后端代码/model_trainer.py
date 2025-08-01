@@ -301,55 +301,89 @@ class ModelTrainer:
         
         # 加载最佳模型
         model.load_state_dict(torch.load(best_model_path))
-        
-        # 在训练集、验证集和测试集上进行预测 - 使用imported的validate_model
-        _, train_preds, train_labels = validate_model(model, train_loader, criterion)
-        _, val_preds, val_labels = validate_model(model, val_loader, criterion)
-        _, test_preds, test_labels = validate_model(model, test_loader, criterion)
-        
-        # 计算详细评估指标
-        metrics_list = self._calculate_metrics(test_labels, test_preds, param_names)
-        
-        # 将metrics_list转换为字典格式，以便于后续处理
-        metrics = {}
-        for i, param in enumerate(param_names):
-            metrics[param] = metrics_list[i]
-        metrics['overall'] = metrics_list[-1]  # 最后一个为整体指标
-        
-        print(f"计算的评估指标: {metrics['overall']}")
-        
+
+        # 在训练集、验证集和测试集上进行预测
+        train_loss_eval, train_preds, train_labels = validate_model(model, train_loader, criterion)
+        val_loss_eval, val_preds, val_labels = validate_model(model, val_loader, criterion)
+        test_loss_eval, test_preds, test_labels = validate_model(model, test_loader, criterion)
+
+        # 计算各数据集的评估指标
+        train_metrics_list = self._calculate_metrics(train_labels, train_preds, param_names)
+        val_metrics_list = self._calculate_metrics(val_labels, val_preds, param_names)
+        test_metrics_list = self._calculate_metrics(test_labels, test_preds, param_names)
+
+        def list_to_dict(metrics_list):
+            d = {param_names[i]: metrics_list[i] for i in range(len(param_names))}
+            d['overall'] = metrics_list[-1]
+            return d
+
+        train_metrics = list_to_dict(train_metrics_list)
+        val_metrics = list_to_dict(val_metrics_list)
+        test_metrics = list_to_dict(test_metrics_list)
+
+        metrics = {
+            'train': train_metrics,
+            'val': val_metrics,
+            'test': test_metrics,
+            'overall': test_metrics['overall']
+        }
+
+        print(f"计算的评估指标: {metrics['test']['overall']}")
+
         # 生成各种对比图 - 保存到模型目录
-        combined_plots = self._plot_predictions_combined(train_labels, train_preds, test_labels, test_preds, param_names, metrics_list, model_save_dir)
-        train_plots = self._plot_predictions_individual(train_labels, train_preds, param_names, metrics_list, 'train', model_save_dir)
-        test_plots = self._plot_predictions_individual(test_labels, test_preds, param_names, metrics_list, 'test', model_save_dir)
-        
+        combined_plots = self._plot_predictions_combined(
+            train_labels,
+            train_preds,
+            test_labels,
+            test_preds,
+            param_names,
+            test_metrics_list,
+            model_save_dir
+        )
+        train_plots = self._plot_predictions_individual(
+            train_labels,
+            train_preds,
+            param_names,
+            train_metrics_list,
+            'train',
+            model_save_dir
+        )
+        test_plots = self._plot_predictions_individual(
+            test_labels,
+            test_preds,
+            param_names,
+            test_metrics_list,
+            'test',
+            model_save_dir
+        )
+
         # 绘制相对误差图 - main.py中有这个功能
-        self._plot_relative_errors_per_param(metrics_list, param_names, 'test', model_save_dir)
-        self._plot_relative_errors_per_param(metrics_list, param_names, 'train', model_save_dir)
-        
+        self._plot_relative_errors_per_param(test_metrics_list, param_names, 'test', model_save_dir)
+        self._plot_relative_errors_per_param(train_metrics_list, param_names, 'train', model_save_dir)
+
         # 绘制预测值与真实值随样本索引变化的图
         self._plot_predictions_vs_index(test_labels, test_preds, param_names, 'test', model_save_dir)
         self._plot_predictions_vs_index(train_labels, train_preds, param_names, 'train', model_save_dir)
-        
+
         # 简化指标供前端展示
         simple_train_metrics = {
-            'loss': float(train_losses[-1]), 
-            'r2': float(metrics['overall']['r2']),
-            'mape': float(metrics['overall']['mape'])
+            'loss': float(train_losses[-1]),
+            'r2': float(train_metrics['overall']['r2']),
+            'mape': float(train_metrics['overall']['mape'])
         }
         simple_val_metrics = {
-            'loss': float(val_losses[-1]), 
-            'r2': float(metrics['overall']['r2']),
-            'mape': float(metrics['overall']['mape'])
+            'loss': float(val_losses[-1]),
+            'r2': float(val_metrics['overall']['r2']),
+            'mape': float(val_metrics['overall']['mape'])
         }
         simple_test_metrics = {
-            'loss': float(metrics['overall']['mse']), 
-            'r2': float(metrics['overall']['r2']),
-            'mape': float(metrics['overall']['mape'])
+            'loss': float(test_metrics['overall']['mse']),
+            'r2': float(test_metrics['overall']['r2']),
+            'mape': float(test_metrics['overall']['mape'])
         }
-        
+
         print(f"简化后的测试指标: {simple_test_metrics}")
-        
+
         # 保存训练参数和结果
         training_result = {
             'model_params': model_params,
@@ -359,26 +393,35 @@ class ModelTrainer:
             'train_losses': train_losses,
             'val_losses': val_losses
         }
-        
+
         # 保存结果到JSON文件
         try:
             # 确保metrics是可序列化的
             serializable_metrics = {}
-            for param, param_metrics in metrics.items():
-                serializable_param_metrics = {}
-                for metric_name, metric_value in param_metrics.items():
-                    # 如果是numpy数组，转换为列表
-                    if metric_name == 'relative_errors' and hasattr(metric_value, 'tolist'):
-                        serializable_param_metrics[metric_name] = metric_value.tolist()
-                    # 如果是numpy标量，转换为Python标量
-                    elif hasattr(metric_value, 'item'):
-                        try:
-                            serializable_param_metrics[metric_name] = float(metric_value.item())
-                        except:
-                            serializable_param_metrics[metric_name] = str(metric_value)
-                    else:
-                        serializable_param_metrics[metric_name] = metric_value
-                serializable_metrics[param] = serializable_param_metrics
+            for ds_name, ds_metrics in metrics.items():
+                if ds_name == 'overall':
+                    # overall 指标直接保存
+                    serializable_metrics[ds_name] = {
+                        k: (float(v.item()) if hasattr(v, 'item') else v)
+                        for k, v in ds_metrics.items()
+                    }
+                    continue
+
+                serializable_ds_metrics = {}
+                for param, param_metrics in ds_metrics.items():
+                    serializable_param_metrics = {}
+                    for metric_name, metric_value in param_metrics.items():
+                        if metric_name == 'relative_errors' and hasattr(metric_value, 'tolist'):
+                            serializable_param_metrics[metric_name] = metric_value.tolist()
+                        elif hasattr(metric_value, 'item'):
+                            try:
+                                serializable_param_metrics[metric_name] = float(metric_value.item())
+                            except Exception:
+                                serializable_param_metrics[metric_name] = str(metric_value)
+                        else:
+                            serializable_param_metrics[metric_name] = metric_value
+                    serializable_ds_metrics[param] = serializable_param_metrics
+                serializable_metrics[ds_name] = serializable_ds_metrics
                 
             # 创建可序列化的训练结果，确保不同数据集的指标有差异
             
