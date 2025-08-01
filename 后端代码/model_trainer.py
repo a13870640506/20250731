@@ -17,7 +17,7 @@ import joblib
 import base64
 from io import BytesIO
 from sklearn.metrics import r2_score, mean_squared_error
-
+import json
 # 导入模型和训练相关组件
 from my_model import TimeSeriesTransformer
 from my_train import train_model
@@ -400,11 +400,19 @@ class ModelTrainer:
             serializable_metrics = {}
             for ds_name, ds_metrics in metrics.items():
                 if ds_name == 'overall':
-                    # overall 指标直接保存
-                    serializable_metrics[ds_name] = {
-                        k: (float(v.item()) if hasattr(v, 'item') else v)
-                        for k, v in ds_metrics.items()
-                    }
+                    # 处理整体指标，考虑relative_errors为数组的情况
+                    overall_dict = {}
+                    for k, v in ds_metrics.items():
+                        if k == 'relative_errors' and hasattr(v, 'tolist'):
+                            overall_dict[k] = v.tolist()
+                        elif hasattr(v, 'item'):
+                            try:
+                                overall_dict[k] = float(v.item())
+                            except Exception:
+                                overall_dict[k] = float(v) if not isinstance(v, (list, tuple, dict)) else v
+                        else:
+                            overall_dict[k] = v
+                    serializable_metrics[ds_name] = overall_dict
                     continue
 
                 serializable_ds_metrics = {}
@@ -490,7 +498,6 @@ class ModelTrainer:
             }
             
             with open(os.path.join(model_save_dir, 'training_result.json'), 'w', encoding='utf-8') as f:
-                import json
                 json.dump(serializable_result, f, indent=4, ensure_ascii=False)
                 print(f"成功保存训练结果到 {os.path.join(model_save_dir, 'training_result.json')}")
         except Exception as e:
