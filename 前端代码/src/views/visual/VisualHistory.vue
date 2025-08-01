@@ -52,32 +52,6 @@ const loadDatasets = async () => {
     console.error('获取历史数据集列表错误:', error)
     ElMessage.error('获取历史数据集列表出错')
     isLoading.value = false
-
-    // 使用模拟数据以防API调用失败
-    datasetList.value = [
-      {
-        id: 'processed_20250801_100009',
-        date: '2025-08-01 10:00:09',
-        info: {
-          train_size: 120,
-          val_size: 20,
-          test_size: 40,
-          input_dim: 7,
-          output_dim: 5
-        }
-      },
-      {
-        id: 'processed_20250801_102947',
-        date: '2025-08-01 10:29:47',
-        info: {
-          train_size: 150,
-          val_size: 25,
-          test_size: 50,
-          input_dim: 7,
-          output_dim: 5
-        }
-      }
-    ]
   }
 }
 
@@ -130,16 +104,16 @@ const analyzeDataset = async () => {
           ]
         },
 
-        // 标准化图表 - 只保留5个输出特征的标准化图
+        // 标准化图表 - 只保留5个输入特征的标准化图
         charts: data.standardization_plots ?
           data.standardization_plots.filter(plot =>
-            ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉'].includes(plot.name)
+            ['泊松比', '内摩擦角', '粘聚力', '剪胀角', 'E'].includes(plot.name)
           ) : [
-            { name: '拱顶下沉', image_path: '' },
-            { name: '拱顶下沉2', image_path: '' },
-            { name: '周边收敛1', image_path: '' },
-            { name: '周边收敛2', image_path: '' },
-            { name: '拱脚下沉', image_path: '' }
+            { name: '泊松比', image_path: '' },
+            { name: '内摩擦角', image_path: '' },
+            { name: '粘聚力', image_path: '' },
+            { name: '剪胀角', image_path: '' },
+            { name: 'E', image_path: '' }
           ]
       }
 
@@ -153,66 +127,29 @@ const analyzeDataset = async () => {
   } catch (error) {
     console.error('分析数据集错误:', error)
     ElMessage.error('分析数据集出错')
-
-    // 使用模拟数据以防API调用失败
-    const dataset = datasetList.value.find(d => d.id === selectedDataset.value)
-
-    if (dataset) {
-      analysisResult.value = {
-        dataset_id: dataset.id,
-        dataset_info: dataset.info,
-        statistics: {
-          input_features: [
-            { name: '特征1', mean: 0.523, std: 0.125, min: 0.245, max: 0.876 },
-            { name: '特征2', mean: 0.731, std: 0.098, min: 0.412, max: 0.954 },
-            { name: '特征3', mean: 0.412, std: 0.187, min: 0.123, max: 0.789 },
-            { name: '特征4', mean: 0.645, std: 0.145, min: 0.321, max: 0.912 },
-            { name: '特征5', mean: 0.512, std: 0.167, min: 0.234, max: 0.867 },
-            { name: '特征6', mean: 0.378, std: 0.211, min: 0.098, max: 0.732 },
-            { name: '特征7', mean: 0.589, std: 0.132, min: 0.276, max: 0.891 }
-          ],
-          output_features: [
-            { name: '拱顶下沉', mean: 0.487, std: 0.156, min: 0.213, max: 0.843 },
-            { name: '拱顶下沉2', mean: 0.512, std: 0.143, min: 0.231, max: 0.867 },
-            { name: '周边收敛1', mean: 0.623, std: 0.112, min: 0.345, max: 0.912 },
-            { name: '周边收敛2', mean: 0.578, std: 0.134, min: 0.298, max: 0.876 },
-            { name: '拱脚下沉', mean: 0.432, std: 0.165, min: 0.187, max: 0.798 }
-          ]
-        },
-        charts: [
-          { name: '拱顶下沉', image_path: '' },
-          { name: '拱顶下沉2', image_path: '' },
-          { name: '周边收敛1', image_path: '' },
-          { name: '周边收敛2', image_path: '' },
-          { name: '拱脚下沉', image_path: '' }
-        ].filter(plot => ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉'].includes(plot.name))
-      }
-
-      showAnalysis.value = true
-    }
   } finally {
     isAnalyzing.value = false
   }
 }
 
-// 图表参数映射
+// 图表参数映射 - 输入特征
 const chartTitles = {
-  '拱顶下沉': '拱顶下沉1（mm）',
-  '拱顶下沉2': '拱顶下沉2（mm）',
-  '周边收敛1': '周边收敛1（mm）',
-  '周边收敛2': '周边收敛2（mm）',
-  '拱脚下沉': '拱脚下沉1（mm）'
+  '泊松比': '泊松比',
+  '内摩擦角': '内摩擦角（°）',
+  '粘聚力': '粘聚力（Mpa）',
+  '剪胀角': '剪胀角（°）',
+  'E': '弹性模量（MPa）'
 }
 
 // 筛选选项
 const selectedPlot = ref('all')
 const plotOptions = [
   { label: '全部参数', value: 'all' },
-  { label: '拱顶下沉1（mm）', value: '拱顶下沉' },
-  { label: '拱顶下沉2（mm）', value: '拱顶下沉2' },
-  { label: '周边收敛1（mm）', value: '周边收敛1' },
-  { label: '周边收敛2（mm）', value: '周边收敛2' },
-  { label: '拱脚下沉1（mm）', value: '拱脚下沉' }
+  { label: '泊松比', value: '泊松比' },
+  { label: '内摩擦角（°）', value: '内摩擦角' },
+  { label: '粘聚力（Mpa）', value: '粘聚力' },
+  { label: '剪胀角（°）', value: '剪胀角' },
+  { label: '弹性模量（MPa）', value: 'E' }
 ]
 
 // 获取图表标题
@@ -293,7 +230,7 @@ onMounted(() => {
         <el-divider>原始数据预览</el-divider>
         <div v-if="analysisResult.original_data" class="data-preview">
           <div class="table-container">
-            <el-table :data="analysisResult.original_data.data" border style="width: 100%" size="small" height="400">
+            <el-table :data="analysisResult.original_data.data" border style="width: 100%" size="small" height="500">
               <el-table-column v-for="(col, index) in analysisResult.original_data.columns" :key="index"
                 :prop="String(index)" :label="col" align="center">
                 <template #default="scope">
@@ -362,23 +299,33 @@ onMounted(() => {
         </div>
 
         <el-divider>标准化处理图表</el-divider>
-        <div class="plot-filter">
-          <span class="filter-label">筛选参数：</span>
-          <el-select v-model="selectedPlot" placeholder="选择参数" style="width: 200px">
-            <el-option v-for="option in plotOptions" :key="option.value" :label="option.label" :value="option.value" />
-          </el-select>
+        <div class="plot-filter-container">
+          <div class="plot-filter">
+            <span class="filter-label">筛选图表：</span>
+            <el-select v-model="selectedPlot" placeholder="选择参数" style="width: 250px">
+              <el-option label="全部图表" value="all" />
+              <el-option v-for="(chart, index) in analysisResult.charts" :key="index" :label="getChartTitle(chart.name)"
+                :value="chart.name" />
+            </el-select>
+          </div>
         </div>
 
-        <div class="charts-container">
-          <div v-for="(chart, index) in analysisResult.charts" :key="index" class="chart-item"
+        <div class="standardization-plots">
+          <div v-for="(chart, index) in analysisResult.charts" :key="index" class="plot-item"
             v-show="selectedPlot === 'all' || selectedPlot === chart.name">
-            <div v-if="chart.image_path" class="chart-image">
-              <h3>{{ getChartTitle(chart.name) }} - 标准化对比</h3>
-              <img :src="getImageUrl(chart.image_path)" :alt="`${getChartTitle(chart.name)}标准化对比`" />
+            <div class="plot-image-container">
+              <img v-if="chart.image_path" :src="getImageUrl(chart.image_path)"
+                :alt="`${getChartTitle(chart.name)}标准化对比`" class="plot-image" />
+              <div v-else class="placeholder-charts">
+                <p class="chart-placeholder">该参数没有可用的标准化处理图</p>
+              </div>
             </div>
-            <div v-else class="chart-placeholder">
-              <h3>{{ getChartTitle(chart.name) }} - 标准化对比</h3>
-              <p>标准化处理图表不可用</p>
+            <div class="plot-footer">
+              <p class="plot-title">{{ getChartTitle(chart.name) }} - 标准化对比</p>
+              <a v-if="chart.image_path" :href="`${baseURL}/download?path=${encodeURIComponent(chart.image_path)}`"
+                target="_blank" class="download-link">
+                下载高清图
+              </a>
             </div>
           </div>
         </div>
@@ -451,10 +398,15 @@ onMounted(() => {
     overflow: hidden;
   }
 
+  .plot-filter-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
   .plot-filter {
     display: flex;
     align-items: center;
-    margin-bottom: 20px;
 
     .filter-label {
       margin-right: 10px;
@@ -463,53 +415,66 @@ onMounted(() => {
     }
   }
 
-  .charts-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: 20px;
+  .standardization-plots {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
     margin-top: 20px;
-  }
 
-  .chart-item {
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    overflow: hidden;
-    padding: 10px;
-    background-color: #fff;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-
-    h3 {
-      margin-top: 0;
-      margin-bottom: 15px;
-      font-size: 16px;
-      color: #303133;
+    .plot-item {
+      width: 90%;
+      max-width: 800px;
       text-align: center;
+
+      .plot-image-container {
+        padding: 5px;
+        background-color: white;
+        border-radius: 4px;
+      }
+
+      .plot-image {
+        width: 100%;
+        border-radius: 4px;
+      }
+
+      .plot-footer {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+
+        .plot-title {
+          font-size: 14px;
+          color: #606266;
+          margin: 0;
+        }
+
+        .download-link {
+          color: #409EFF;
+          font-size: 13px;
+          text-decoration: none;
+
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+      }
     }
   }
 
-  .chart-placeholder {
-    width: 100%;
+  .placeholder-charts {
+    margin-top: 20px;
     height: 300px;
     background-color: #f5f7fa;
+    border-radius: 4px;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #909399;
-    font-style: italic;
-  }
 
-  .chart-image {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-
-    img {
-      max-width: 100%;
-      max-height: 300px;
-      border: 1px solid #ebeef5;
-      border-radius: 4px;
+    .chart-placeholder {
+      color: #909399;
+      font-style: italic;
     }
   }
 

@@ -743,11 +743,10 @@ def get_dataset_detail():
         if os.path.exists(original_data_path):
             try:
                 df = pd.read_csv(original_data_path)
-                # 只返回前10行数据
-                preview_rows = min(10, len(df))
+                # 返回全部数据
                 original_data = {
                     'columns': df.columns.tolist(),
-                    'data': df.head(preview_rows).values.tolist()
+                    'data': df.values.tolist()
                 }
             except Exception as e:
                 print(f"读取原始数据文件出错: {str(e)}")
@@ -768,7 +767,9 @@ def get_dataset_detail():
             for file in os.listdir(plots_dir):
                 if file.endswith('_standardization_comparison.png'):
                     param_name = file.split('_standardization_comparison.png')[0]
-                    plot_path = os.path.join(plots_dir, file)
+                    plot_full_path = os.path.join(plots_dir, file)
+                    # 返回相对于 DATA_DIR 的路径，方便前端通过 dataset_image 接口访问
+                    plot_path = os.path.relpath(plot_full_path, DATA_DIR)
                     standardization_plots.append({
                         'name': param_name,
                         'image_path': plot_path
