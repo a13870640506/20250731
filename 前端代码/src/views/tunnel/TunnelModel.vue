@@ -1,10 +1,11 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElLoading, ElMessageBox } from 'element-plus'
-import { trainModelService, uploadDatasetService, getOptimizationHistoryService, getOptimizationResultService } from '@/api/transformer'
+import { trainModelService, uploadDatasetService, getOptimizationHistoryService, getOptimizationResultService, getModelResultService, getRecentModelsService } from '@/api/transformer'
 import { useRouter } from 'vue-router'
 import { ArrowRight, View, CopyDocument, Download } from '@element-plus/icons-vue'
 import { onBeforeMount } from 'vue'
+import { format } from '@/utils/format'
 
 // 当前激活的Tab
 const activeTab = ref('dataPrep')
@@ -87,10 +88,11 @@ const modelParams = ref({
 const trainingParams = ref({
   epochs: 300,
   batch_size: 16,
-  learning_rate: 0.0001,
-  weight_decay: 0.0001,
+  learning_rate: 8.564825241340346e-05,
+  weight_decay: 2.3600012291720694e-07,
   model_save_path: ''
 })
+
 
 // 训练状态
 const isTraining = ref(false)
@@ -110,7 +112,53 @@ const trainingResult = ref({
     loss: null,
     r2: null
   },
-  loss_curve: null
+  loss_curve: null,
+  model_params: null,
+  training_params: null
+})
+
+// 最近训练的模型路径列表
+const recentModelPaths = ref([])
+const recentModelDates = ref([])
+
+// 选中的模型路径
+const selectedModelPath = ref('')
+const selectedModelResult = ref(null)
+
+// 格式化数字，根据不同类型的指标使用不同的格式
+const formatNumber = (value, type = 'default') => {
+  if (value === undefined || value === null) return 'N/A'
+
+  // 将字符串转换为数字
+  if (typeof value === 'string') {
+    value = parseFloat(value)
+  }
+
+  // 如果不是数字，返回原值
+  if (isNaN(value)) return value
+
+  // 根据类型格式化
+  switch (type) {
+    case 'mse': // MSE保留5位小数
+      return value.toFixed(5)
+    case 'r2': // R2显示为百分比，保留2位小数
+      return (value * 100).toFixed(2) + '%'
+    case 'mape': // MAPE已经是百分比，保留2位小数
+      return value.toFixed(2) + '%'
+    default:
+      return format(value)
+  }
+}
+
+// 当前显示的结果（来自新训练或选择已有模型）
+const currentResult = computed(() => {
+  // 只有在明确加载了模型结果时才返回结果
+  if (selectedModelResult.value) {
+    return selectedModelResult.value
+  } else if (showTrainingResult.value && trainingResult.value) {
+    return trainingResult.value
+  }
+  return null
 })
 
 // 是否显示结果
@@ -332,6 +380,9 @@ const confirmTraining = (fromParamTab) => {
 const startTraining = async (fromParamTab) => {
   try {
     isTraining.value = true
+    // 重置选中的模型结果
+    selectedModelPath.value = ''
+    selectedModelResult.value = null
 
     // 如果是从参数定义标签页启动训练，则切换到训练结果标签页
     if (fromParamTab) {
@@ -349,6 +400,7 @@ const startTraining = async (fromParamTab) => {
     formDataToUpload.append('nhead', modelParams.value.nhead)
     formDataToUpload.append('num_layers', modelParams.value.num_layers)
     formDataToUpload.append('dropout', modelParams.value.dropout)
+    formDataToUpload.append('mode', paramMode.value)
     formDataToUpload.append('input_dim', modelParams.value.input_dim)
     formDataToUpload.append('output_dim', modelParams.value.output_dim)
     if (trainingParams.value.model_save_path) {
@@ -369,6 +421,9 @@ const startTraining = async (fromParamTab) => {
         ElMessage.success('模型训练成功')
         trainingResult.value = res.data.data
         showTrainingResult.value = true
+
+        // 训练成功后，刷新最近模型列表
+        loadRecentModels()
       } else {
         ElMessage.error(res.data?.message || '模型训练失败')
       }
@@ -386,9 +441,108 @@ const startTraining = async (fromParamTab) => {
   }
 }
 
-// 组件挂载前加载优化历史
-onBeforeMount(() => {
-  loadOptimizationHistory()
+// 加载最近训练的模型列表
+const loadRecentModels = async () => {
+  try {
+    console.log("开始加载最近训练记录...")
+    const res = await getRecentModelsService()
+
+    if (res.data && res.data.success) {
+      recentModelPaths.value = res.data.data.paths || []
+      recentModelDates.value = res.data.data.dates || []
+      console.log("成功加载最近训练记录:", recentModelPaths.value)
+
+      if (recentModelPaths.value.length === 0) {
+        console.warn("没有找到训练记录，请检查模型目录是否存在训练结果")
+      }
+    } else {
+      console.error('获取最近模型列表失败:', res.data?.message)
+      ElMessage.warning('获取最近训练记录失败')
+    }
+  } catch (error) {
+    console.error('获取最近模型列表错误:', error)
+    ElMessage.error('获取最近训练记录出错')
+  }
+}
+
+// 加载指定模型路径的结果
+const loadModelResult = async (modelPath) => {
+  if (!modelPath) {
+    selectedModelResult.value = null
+    return
+  }
+
+  try {
+    const loading = ElLoading.service({
+      lock: true,
+      text: '加载模型结果...',
+      background: 'rgba(0, 0, 0, 0.7)'
+    })
+
+    console.log("正在加载模型结果:", modelPath)
+    const res = await getModelResultService(modelPath)
+
+    if (res.data && res.data.success) {
+      console.log("模型结果加载成功:", res.data.data)
+      selectedModelResult.value = res.data.data
+
+      // 确保模型路径正确显示
+      if (!selectedModelResult.value.model_path) {
+        selectedModelResult.value.model_path = modelPath
+      }
+
+      // 确保始终显示结果
+      showTrainingResult.value = true
+
+      ElMessage.success('模型结果加载成功')
+    } else {
+      ElMessage.warning('获取模型结果失败: ' + (res.data?.message || '未知错误'))
+      selectedModelResult.value = null
+    }
+
+    loading.close()
+  } catch (error) {
+    ElMessage.error(`获取模型结果失败: ${error.message}`)
+    console.error('获取模型结果错误:', error)
+    selectedModelResult.value = null
+    loading.close()
+  }
+}
+
+// 复制选中的模型路径
+const copySelectedModelPath = () => {
+  if (!selectedModelPath.value) {
+    ElMessage.warning('请先选择模型路径')
+    return
+  }
+
+  navigator.clipboard.writeText(selectedModelPath.value)
+    .then(() => {
+      ElMessage.success('已复制模型路径')
+    })
+    .catch(() => {
+      ElMessage.error('复制失败，请手动复制')
+    })
+}
+
+// 组件挂载前加载优化历史和最近模型
+onBeforeMount(async () => {
+  // 并行加载优化历史和最近模型列表
+  await Promise.all([
+    loadOptimizationHistory(),
+    loadRecentModels()
+  ])
+
+  console.log("已加载最近模型列表:", recentModelPaths.value)
+
+  // 如果有模型记录，自动选择第一个并加载
+  if (recentModelPaths.value && recentModelPaths.value.length > 0) {
+    selectedModelPath.value = recentModelPaths.value[0]
+    if (activeTab.value === 'modelTrain') {
+      // 自动加载第一个模型的结果
+      await loadModelResult(selectedModelPath.value)
+    }
+  }
 
   // 监听参数变化，自动更新模型保存路径
   generateModelSavePath()
@@ -866,109 +1020,171 @@ onBeforeMount(() => {
               <el-card class="train-card" shadow="hover">
                 <template #header>
                   <div class="train-header">
-                    <span>开始训练</span>
+                    <span>模型选择</span>
                   </div>
                 </template>
 
-                <div class="train-info">
-                  <p><strong>数据准备:</strong> {{ showDataResult ? '已完成' : '未完成' }}</p>
-                  <p><strong>模型参数:</strong> d_model={{ modelParams.d_model }}, nhead={{ modelParams.nhead }}, layers={{
-                    modelParams.num_layers }}</p>
-                  <p><strong>训练参数:</strong> epochs={{ trainingParams.epochs }}, batch_size={{ trainingParams.batch_size
-                  }}</p>
+                <el-divider>最近训练记录</el-divider>
+                <div class="recent-models">
+                  <el-select v-model="selectedModelPath" placeholder="选择模型路径" style="width: 100%; margin-bottom: 10px;"
+                    @change="loadModelResult" filterable>
+                    <el-option v-for="(path, index) in recentModelPaths" :key="index" :label="path" :value="path">
+                      <span class="model-path-option">{{ path }}</span>
+                      <span class="model-path-date text-muted">{{ recentModelDates[index] }}</span>
+                    </el-option>
+                  </el-select>
                 </div>
 
-                <el-button type="primary" :loading="isTraining" @click="confirmTraining(false)" style="width: 100%;">
-                  {{ isTraining ? '训练中...' : '开始训练' }}
+                <el-divider>模型路径</el-divider>
+                <div class="path-input-group">
+                  <el-input v-model="selectedModelPath" placeholder="输入或粘贴模型路径" clearable />
+                  <el-button type="primary" :icon="CopyDocument" @click="copySelectedModelPath"></el-button>
+                </div>
+
+                <el-button type="primary" style="width: 100%; margin-top: 15px;"
+                  @click="loadModelResult(selectedModelPath)">
+                  加载模型结果
                 </el-button>
-
-                <div class="train-tip" v-if="!showDataResult">
-                  <el-alert title="请先完成数据准备" type="warning" :closable="false" show-icon />
-                </div>
               </el-card>
             </el-col>
 
             <el-col :span="18">
-              <el-card class="result-card">
-                <template #header>
-                  <div class="result-header">
-                    <span>训练结果</span>
-                  </div>
-                </template>
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-card class="loss-curve-card">
+                    <template #header>
+                      <div class="result-header">
+                        <span>训练损失曲线</span>
+                      </div>
+                    </template>
 
-                <div v-if="!showTrainingResult" class="no-result">
-                  <el-empty description="暂无训练结果" />
-                  <p class="no-result-tip">请点击"开始训练"按钮</p>
-                </div>
-
-                <template v-else>
-                  <el-descriptions title="模型信息" :column="1" border>
-                    <el-descriptions-item label="模型路径">{{ trainingResult.model_path }}</el-descriptions-item>
-                  </el-descriptions>
-
-                  <el-divider>评估指标</el-divider>
-
-                  <el-row :gutter="20">
-                    <el-col :span="8">
-                      <el-card shadow="hover">
-                        <template #header>
-                          <div class="metric-header">训练集指标</div>
-                        </template>
-                        <div class="metric-item">
-                          <span class="metric-label">损失 (MSE):</span>
-                          <span class="metric-value">{{ trainingResult.train_metrics.loss }}</span>
-                        </div>
-                        <div class="metric-item">
-                          <span class="metric-label">R² 系数:</span>
-                          <span class="metric-value">{{ trainingResult.train_metrics.r2 }}</span>
-                        </div>
-                      </el-card>
-                    </el-col>
-
-                    <el-col :span="8">
-                      <el-card shadow="hover">
-                        <template #header>
-                          <div class="metric-header">验证集指标</div>
-                        </template>
-                        <div class="metric-item">
-                          <span class="metric-label">损失 (MSE):</span>
-                          <span class="metric-value">{{ trainingResult.val_metrics.loss }}</span>
-                        </div>
-                        <div class="metric-item">
-                          <span class="metric-label">R² 系数:</span>
-                          <span class="metric-value">{{ trainingResult.val_metrics.r2 }}</span>
-                        </div>
-                      </el-card>
-                    </el-col>
-
-                    <el-col :span="8">
-                      <el-card shadow="hover">
-                        <template #header>
-                          <div class="metric-header">测试集指标</div>
-                        </template>
-                        <div class="metric-item">
-                          <span class="metric-label">损失 (MSE):</span>
-                          <span class="metric-value">{{ trainingResult.test_metrics.loss }}</span>
-                        </div>
-                        <div class="metric-item">
-                          <span class="metric-label">R² 系数:</span>
-                          <span class="metric-value">{{ trainingResult.test_metrics.r2 }}</span>
-                        </div>
-                      </el-card>
-                    </el-col>
-                  </el-row>
-
-                  <el-divider>训练过程</el-divider>
-
-                  <div class="loss-curve">
-                    <img v-if="trainingResult.loss_curve" :src="`data:image/png;base64,${trainingResult.loss_curve}`"
-                      alt="训练损失曲线" class="curve-image" />
-                    <div v-else class="placeholder-charts">
-                      <p class="chart-placeholder">训练过程损失曲线图表将显示在这里</p>
+                    <div v-if="!currentResult" class="no-result">
+                      <el-empty description="暂无训练结果" />
+                      <p class="no-result-tip">请选择模型路径并点击"加载模型结果"</p>
                     </div>
-                  </div>
-                </template>
-              </el-card>
+
+                    <template v-else>
+                      <div class="loss-curve">
+                        <img v-if="currentResult.loss_curve" :src="`data:image/png;base64,${currentResult.loss_curve}`"
+                          alt="训练损失曲线" class="curve-image" />
+                        <div v-else class="placeholder-charts">
+                          <p class="chart-placeholder">该模型没有可用的损失曲线图</p>
+                        </div>
+                      </div>
+                    </template>
+                  </el-card>
+                </el-col>
+
+                <el-col :span="12">
+                  <el-card class="metrics-card">
+                    <template #header>
+                      <div class="result-header">
+                        <span>评估指标与训练参数</span>
+                      </div>
+                    </template>
+
+                    <div v-if="!currentResult" class="no-result">
+                      <el-empty description="暂无训练结果" />
+                      <p class="no-result-tip">请选择模型路径并点击"加载模型结果"</p>
+                    </div>
+
+                    <template v-else>
+                      <el-descriptions title="模型信息" :column="1" border size="small">
+                        <el-descriptions-item label="模型路径">{{ currentResult.model_path }}</el-descriptions-item>
+                      </el-descriptions>
+
+                      <el-divider>评估指标</el-divider>
+                      <el-tabs type="card">
+                        <el-tab-pane label="训练集">
+                          <div class="metric-item">
+                            <span class="metric-label">损失 (MSE):</span>
+                            <span class="metric-value">{{ currentResult.train_metrics?.loss ?
+                              formatNumber(currentResult.train_metrics.loss, 'mse') : 'N/A' }}</span>
+                          </div>
+                          <div class="metric-item">
+                            <span class="metric-label">R² 系数:</span>
+                            <span class="metric-value">{{ currentResult.train_metrics?.r2 ?
+                              formatNumber(currentResult.train_metrics.r2, 'r2') : 'N/A' }}</span>
+                          </div>
+                          <div class="metric-item">
+                            <span class="metric-label">MAPE:</span>
+                            <span class="metric-value">{{ currentResult.train_metrics?.mape ?
+                              formatNumber(currentResult.train_metrics.mape, 'mape') : 'N/A' }}</span>
+                          </div>
+                        </el-tab-pane>
+                        <el-tab-pane label="验证集">
+                          <div class="metric-item">
+                            <span class="metric-label">损失 (MSE):</span>
+                            <span class="metric-value">{{ currentResult.val_metrics?.loss ?
+                              formatNumber(currentResult.val_metrics.loss, 'mse') : 'N/A' }}</span>
+                          </div>
+                          <div class="metric-item">
+                            <span class="metric-label">R² 系数:</span>
+                            <span class="metric-value">{{ currentResult.val_metrics?.r2 ?
+                              formatNumber(currentResult.val_metrics.r2, 'r2') : 'N/A' }}</span>
+                          </div>
+                          <div class="metric-item">
+                            <span class="metric-label">MAPE:</span>
+                            <span class="metric-value">{{ currentResult.val_metrics?.mape ?
+                              formatNumber(currentResult.val_metrics.mape, 'mape') : 'N/A' }}</span>
+                          </div>
+                        </el-tab-pane>
+                        <el-tab-pane label="测试集">
+                          <div class="metric-item">
+                            <span class="metric-label">损失 (MSE):</span>
+                            <span class="metric-value">{{ currentResult.test_metrics?.loss ?
+                              formatNumber(currentResult.test_metrics.loss, 'mse') : 'N/A' }}</span>
+                          </div>
+                          <div class="metric-item">
+                            <span class="metric-label">R² 系数:</span>
+                            <span class="metric-value">{{ currentResult.test_metrics?.r2 ?
+                              formatNumber(currentResult.test_metrics.r2, 'r2') : 'N/A' }}</span>
+                          </div>
+                          <div class="metric-item">
+                            <span class="metric-label">MAPE:</span>
+                            <span class="metric-value">{{ currentResult.test_metrics?.mape ?
+                              formatNumber(currentResult.test_metrics.mape, 'mape') : 'N/A' }}</span>
+                          </div>
+                        </el-tab-pane>
+                      </el-tabs>
+
+                      <el-divider>训练参数</el-divider>
+                      <div class="training-params">
+                        <div class="param-item">
+                          <span class="param-label">模型维度 (d_model):</span>
+                          <span class="param-value">{{ currentResult.model_params?.d_model || 'N/A' }}</span>
+                        </div>
+                        <div class="param-item">
+                          <span class="param-label">注意力头数 (nhead):</span>
+                          <span class="param-value">{{ currentResult.model_params?.nhead || 'N/A' }}</span>
+                        </div>
+                        <div class="param-item">
+                          <span class="param-label">Transformer层数:</span>
+                          <span class="param-value">{{ currentResult.model_params?.num_layers || 'N/A' }}</span>
+                        </div>
+                        <div class="param-item">
+                          <span class="param-label">学习率:</span>
+                          <span class="param-value">{{ currentResult.training_params?.learning_rate ?
+                            formatNumber(currentResult.training_params.learning_rate) : 'N/A' }}</span>
+                        </div>
+                        <div class="param-item">
+                          <span class="param-label">权重衰减:</span>
+                          <span class="param-value">{{ currentResult.training_params?.weight_decay ?
+                            formatNumber(currentResult.training_params.weight_decay) : 'N/A' }}</span>
+                        </div>
+                        <div class="param-item">
+                          <span class="param-label">批次大小:</span>
+                          <span class="param-value">{{ currentResult.training_params?.batch_size || 'N/A' }}</span>
+                        </div>
+                        <div class="param-item">
+                          <span class="param-label">训练轮次:</span>
+                          <span class="param-value">{{ currentResult.training_params?.epochs || 'N/A' }}</span>
+                        </div>
+                      </div>
+                    </template>
+                  </el-card>
+                </el-col>
+              </el-row>
             </el-col>
           </el-row>
         </el-tab-pane>
@@ -1304,6 +1520,55 @@ onBeforeMount(() => {
       color: #909399;
       font-style: italic;
     }
+  }
+
+  .recent-models {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .model-path-option {
+    display: inline-block;
+    width: 70%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .model-path-date {
+    float: right;
+    color: #909399;
+    font-size: 12px;
+  }
+
+  .training-params {
+    margin-top: 10px;
+  }
+
+  .param-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .param-label {
+    color: #606266;
+  }
+
+  .param-value {
+    font-weight: bold;
+    color: #303133;
+  }
+
+  .loss-curve-card,
+  .metrics-card {
+    height: 100%;
+    min-height: 450px;
+  }
+
+  .text-muted {
+    color: #909399;
   }
 }
 </style>

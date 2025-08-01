@@ -91,4 +91,21 @@ export const getDatasetsService = () => {
     url: '/transformer/datasets',
     method: 'get'
   })
+}
+
+// 获取最近训练的模型列表API
+export const getRecentModelsService = () => {
+  return request({
+    url: '/transformer/recent_models',
+    method: 'get'
+  })
+}
+
+// 获取指定模型路径的训练结果API
+export const getModelResultService = (modelPath) => {
+  return request({
+    url: '/transformer/model_result',
+    method: 'get',
+    params: { model_path: modelPath }
+  })
 } 

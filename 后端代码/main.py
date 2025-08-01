@@ -921,7 +921,7 @@ def main():
 
     print(f'\n最终损失: 训练集={train_loss:.6f}, 验证集={val_loss:.6f}, 测试集={test_loss:.6f}')
 
-    # 计算评估指标
+    # 计算评估指标 - 确保每个数据集使用各自的真实值和预测值
     train_metrics = calculate_metrics(train_true, train_preds, param_names)
     val_metrics = calculate_metrics(val_true, val_preds, param_names)
     test_metrics = calculate_metrics(test_true, test_preds, param_names)
