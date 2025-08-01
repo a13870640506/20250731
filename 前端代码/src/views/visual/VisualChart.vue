@@ -54,9 +54,9 @@ const loadRecentModels = async () => {
     // 调用后端API获取最近模型列表
     const response = await getRecentModelsService()
 
-    if (response.success) {
-      recentModelPaths.value = response.data.paths || []
-      recentModelDates.value = response.data.dates || []
+    if (response.data && response.data.success) {
+      recentModelPaths.value = response.data.data.paths || []
+      recentModelDates.value = response.data.data.dates || []
 
       console.log('获取到模型列表:', recentModelPaths.value)
 
@@ -71,7 +71,7 @@ const loadRecentModels = async () => {
         selectedModelPath.value = ''
       }
     } else {
-      ElMessage.warning(response.message || '获取模型列表失败')
+      ElMessage.warning(response.data?.message || '获取模型列表失败')
       selectedModelPath.value = ''
     }
 
@@ -88,8 +88,8 @@ const loadRecentModels = async () => {
 const loadLatestModel = async () => {
   try {
     const res = await getLatestModelService()
-    if (res.success && res.data && res.data.path) {
-      selectedModelPath.value = res.data.path
+    if (res.data && res.data.success && res.data.data && res.data.data.path) {
+      selectedModelPath.value = res.data.data.path
       console.log('最新模型路径:', selectedModelPath.value)
       await loadModelResult(selectedModelPath.value)
     }
@@ -129,8 +129,8 @@ const loadModelResult = async (modelPath) => {
     const response = await getModelResultService(normalizedPath)
     console.log('API响应:', response)
 
-    if (response.success && response.data) {
-      console.log('成功获取模型结果:', response.data)
+    if (response.data && response.data.success && response.data.data) {
+      console.log('成功获取模型结果:', response.data.data)
 
       // 构建图片路径 - 使用API接口访问图片
       const baseApiUrl = `${import.meta.env.VITE_API_URL || ''}/transformer/model_image?path=`
@@ -191,7 +191,7 @@ const loadModelResult = async (modelPath) => {
       ElMessage.success('模型结果加载成功')
     } else {
       loading.close()
-      ElMessage.warning(response.message || '获取模型结果失败')
+      ElMessage.warning(response.data?.message || '获取模型结果失败')
       console.error('API返回错误:', response)
     }
   } catch (error) {
