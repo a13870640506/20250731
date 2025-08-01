@@ -642,17 +642,19 @@ def _get_dataset_info(dataset_path):
                         key, value = line.split(':', 1)
                         key = key.strip().lower()
                         value = value.strip()
-                        if key == 'train samples' or key == 'training samples':
+
+                        # 同时兼容英文和中文关键字
+                        if key in ['train samples', 'training samples', '训练集样本数']:
                             info['train_size'] = int(value)
-                        elif key == 'val samples' or key == 'validation samples':
+                        elif key in ['val samples', 'validation samples', '验证集样本数']:
                             info['val_size'] = int(value)
-                        elif key == 'test samples':
+                        elif key in ['test samples', '测试集样本数']:
                             info['test_size'] = int(value)
-                        elif key == 'input dimensions':
+                        elif key in ['input dimensions', '输入维度']:
                             info['input_dim'] = int(value)
-                        elif key == 'output dimensions':
+                        elif key in ['output dimensions', '输出维度']:
                             info['output_dim'] = int(value)
-        
+
         # 如果没有找到信息文件或信息不完整，尝试从数据文件推断
         if info['train_size'] == 0 or info['input_dim'] == 0:
             # 尝试读取训练数据文件
@@ -762,7 +764,9 @@ def get_dataset_detail():
         
         # 获取标准化图表
         standardization_plots = []
-        plots_dir = os.path.join(DATA_DIR, f'plots_{dataset_id.split("_")[1]}')
+        # 处理数据集ID，提取时间戳部分以找到对应的标准化图目录
+        timestamp = dataset_id.replace('processed_', '')
+        plots_dir = os.path.join(DATA_DIR, f'plots_{timestamp}')
         if os.path.exists(plots_dir):
             for file in os.listdir(plots_dir):
                 if file.endswith('_standardization_comparison.png'):
