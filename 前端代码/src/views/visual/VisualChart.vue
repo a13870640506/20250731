@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElLoading } from 'element-plus'
-import { getModelResultService, getRecentModelsService } from '@/api/transformer'
+import { getModelResultService, getRecentModelsService, getLatestModelService } from '@/api/transformer'
 
 // 模型选择相关
 const selectedModelPath = ref('')
@@ -60,12 +60,12 @@ const loadRecentModels = async () => {
 
       console.log('获取到模型列表:', recentModelPaths.value)
 
-      // 如果有模型，默认选中第一个
-      if (recentModelPaths.value.length > 0) {
+      if (recentModelPaths.value.length > 0 && !selectedModelPath.value) {
         selectedModelPath.value = recentModelPaths.value[0]
         console.log('默认选择模型路径:', selectedModelPath.value)
         loadModelResult(selectedModelPath.value)
-      } else {
+      } else if (recentModelPaths.value.length === 0) {
+
         // 如果没有获取到模型列表，显示提示信息
         ElMessage.warning('未找到任何模型记录，请手动输入模型路径')
         selectedModelPath.value = ''
@@ -81,6 +81,20 @@ const loadRecentModels = async () => {
     ElMessage.error('获取最近训练记录出错')
     isLoading.value = false
     selectedModelPath.value = ''
+  }
+}
+
+// 获取最新模型并自动加载
+const loadLatestModel = async () => {
+  try {
+    const res = await getLatestModelService()
+    if (res.success && res.data && res.data.path) {
+      selectedModelPath.value = res.data.path
+      console.log('最新模型路径:', selectedModelPath.value)
+      await loadModelResult(selectedModelPath.value)
+    }
+  } catch (error) {
+    console.error('获取最新模型失败:', error)
   }
 }
 
@@ -101,63 +115,75 @@ const loadModelResult = async (modelPath) => {
       background: 'rgba(0, 0, 0, 0.7)'
     })
 
+    // 确保模型路径格式正确
+    let normalizedPath = modelPath
+
+    // 如果路径不是以 models/ 开头但是以model_开头，添加前缀
+    if (!normalizedPath.startsWith('models/') && normalizedPath.startsWith('model_')) {
+      normalizedPath = 'models/' + normalizedPath
+      console.log('规范化后的模型路径:', normalizedPath)
+    }
+
     // 调用后端API获取模型结果
-    console.log('调用API获取模型结果:', modelPath)
-    const response = await getModelResultService(modelPath)
+    console.log('调用API获取模型结果:', normalizedPath)
+    const response = await getModelResultService(normalizedPath)
     console.log('API响应:', response)
 
     if (response.success && response.data) {
       console.log('成功获取模型结果:', response.data)
 
       // 构建图片路径 - 使用API接口访问图片
-      // 直接使用modelPath，不添加额外的路径前缀
-      const baseUrl = `${import.meta.env.VITE_API_URL || ''}/transformer/model_image?path=` + modelPath + '/'
-      console.log('图片基础URL:', baseUrl)
+      const baseApiUrl = `${import.meta.env.VITE_API_URL || ''}/transformer/model_image?path=`
+      console.log('API基础URL:', baseApiUrl)
       const parameters = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
 
       // 为每个参数创建图片路径
       const imageData = parameters.map(param => {
+        // 确保每个图片请求都是独立的，包含完整的模型路径和文件名
         return {
           param: param,
           images: {
             prediction: {
-              train: baseUrl + 'train_prediction_' + param + '_zh.png',
-              test: baseUrl + 'test_prediction_' + param + '_zh.png'
+              train: `${baseApiUrl}${normalizedPath}&file=train_prediction_${param}_zh.png`,
+              test: `${baseApiUrl}${normalizedPath}&file=test_prediction_${param}_zh.png`
             },
             combined: {
-              all: baseUrl + 'combined_prediction_' + param + '_zh.png'
+              all: `${baseApiUrl}${normalizedPath}&file=combined_prediction_${param}_zh.png`
             },
             error: {
-              train: baseUrl + param + '_train_errors_zh.png',
-              test: baseUrl + param + '_test_errors_zh.png'
+              train: `${baseApiUrl}${normalizedPath}&file=${param}_train_errors_zh.png`,
+              test: `${baseApiUrl}${normalizedPath}&file=${param}_test_errors_zh.png`
             }
           }
         }
       })
 
       // 从API响应中获取模型指标
+      const data = response.data.data
+      console.log('获取到的模型数据:', data)
+
       modelResult.value = {
-        model_path: modelPath,
-        train_metrics: response.data.train_metrics || {
+        model_path: normalizedPath,
+        train_metrics: data.train_metrics || {
           loss: 0.0082,
           r2: 0.97,
           mape: 4.2
         },
-        val_metrics: response.data.val_metrics || {
+        val_metrics: data.val_metrics || {
           loss: 0.0153,
           r2: 0.93,
           mape: 6.0
         },
-        test_metrics: response.data.test_metrics || {
+        test_metrics: data.test_metrics || {
           loss: 0.0221,
           r2: 0.89,
           mape: 7.8
         },
         imageData: imageData,
         // 保存其他可能的API返回数据
-        model_params: response.data.model_params,
-        training_params: response.data.training_params,
-        loss_curve: response.data.loss_curve
+        model_params: data.model_params,
+        training_params: data.training_params,
+        loss_curve: data.loss_curve
       }
 
       showCharts.value = true
@@ -217,8 +243,33 @@ const copyModelPath = () => {
 }
 
 // 组件挂载时加载最近模型
-onMounted(() => {
-  loadRecentModels()
+onMounted(async () => {
+  try {
+    console.log('组件挂载，开始加载模型数据')
+
+    // 并行加载最近模型列表和最新模型
+    await Promise.all([
+      loadRecentModels(),
+      loadLatestModel()
+    ])
+
+    // 如果没有选中的模型路径，但有模型列表，则选择第一个
+    if (!selectedModelPath.value && recentModelPaths.value && recentModelPaths.value.length > 0) {
+      selectedModelPath.value = recentModelPaths.value[0]
+      console.log('自动选择第一个模型:', selectedModelPath.value)
+      await loadModelResult(selectedModelPath.value)
+    }
+
+    // 如果仍然没有选中的模型，尝试使用默认路径
+    if (!selectedModelPath.value) {
+      selectedModelPath.value = 'models/model_c256_lr0.000086_bs16'
+      console.log('使用默认模型路径:', selectedModelPath.value)
+      await loadModelResult(selectedModelPath.value)
+    }
+  } catch (error) {
+    console.error('组件挂载时加载模型出错:', error)
+    ElMessage.error('加载模型数据失败，请手动选择模型路径')
+  }
 })
 </script>
 

@@ -470,6 +470,73 @@ def get_recent_models():
             'message': f'获取模型列表失败: {str(e)}'
         })
 
+# 获取最新训练模型的路径
+@app.route('/transformer/latest_model', methods=['GET'])
+def get_latest_model():
+    try:
+        # 复用获取最近模型的逻辑，只取最新一个
+        model_dirs = []
+        model_dates = []
+
+        for item in os.listdir(MODEL_DIR):
+            full_path = os.path.join(MODEL_DIR, item)
+            if os.path.isdir(full_path) and item.startswith('model_'):
+                creation_time = os.path.getctime(full_path)
+                from datetime import datetime
+                date_str = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                model_dirs.append(item)
+                model_dates.append(date_str)
+
+        if len(model_dirs) == 0:
+            models_subdir = os.path.join(MODEL_DIR, 'models')
+            if os.path.exists(models_subdir) and os.path.isdir(models_subdir):
+                for item in os.listdir(models_subdir):
+                    full_path = os.path.join(models_subdir, item)
+                    if os.path.isdir(full_path) and item.startswith('model_'):
+                        creation_time = os.path.getctime(full_path)
+                        from datetime import datetime
+                        date_str = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                        model_dirs.append(f"models/{item}")
+                        model_dates.append(date_str)
+
+        if len(model_dirs) == 0:
+            for root, dirs, _ in os.walk(MODEL_DIR):
+                for dir_name in dirs:
+                    if dir_name.startswith('model_'):
+                        full_path = os.path.join(root, dir_name)
+                        rel_path = os.path.relpath(full_path, MODEL_DIR)
+                        creation_time = os.path.getctime(full_path)
+                        from datetime import datetime
+                        date_str = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                        model_dirs.append(rel_path)
+                        model_dates.append(date_str)
+
+        if model_dirs:
+            from datetime import datetime
+            sorted_models = sorted(zip(model_dirs, model_dates),
+                                   key=lambda x: datetime.strptime(x[1], '%Y-%m-%d %H:%M:%S'),
+                                   reverse=True)
+            latest_path, latest_date = sorted_models[0]
+            return jsonify({
+                'success': True,
+                'data': {
+                    'path': latest_path,
+                    'date': latest_date
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': '未找到模型'
+            })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'获取最新模型失败: {str(e)}'
+        })
+
+
 
 # 获取指定模型路径的训练结果
 @app.route('/transformer/model_result', methods=['GET'])
@@ -769,17 +836,32 @@ def get_model_image():
                 'message': '请提供图片路径'
             }), 400
         
+        # 获取文件名参数
+        file_name = request.args.get('file')
+        
         # 移除开头的斜杠
         if image_path.startswith('/'):
             image_path = image_path[1:]
             
         print(f"图片路径请求: {image_path}")
+        print(f"文件名参数: {file_name}")
+        print(f"请求参数: {request.args}")
         
-        # 如果路径是 models/model_xxx 格式，则直接在 MODEL_DIR/models 下查找
+        # 处理模型路径和文件名
+        model_dir = None
+        full_path = None
+        
+        # 如果路径是 models/model_xxx 格式
         if image_path.startswith('models/model_'):
-            # 从 models/model_xxx 提取 model_xxx 部分
             model_name = image_path.split('/', 1)[1]
-            full_path = os.path.join(MODEL_DIR, 'models', model_name)
+            model_dir = os.path.join(MODEL_DIR, 'models', model_name)
+            
+            # 如果有文件名参数，拼接完整路径
+            if file_name:
+                full_path = os.path.join(model_dir, file_name)
+                print(f"使用文件名参数构建路径: {full_path}")
+            else:
+                full_path = model_dir
         else:
             # 否则直接使用完整路径
             full_path = os.path.join(MODEL_DIR, image_path)
@@ -789,10 +871,43 @@ def get_model_image():
         # 检查路径是否存在
         if not os.path.exists(full_path):
             print(f"图片路径不存在: {full_path}")
-            return jsonify({
-                'success': False,
-                'message': f'图片不存在: {image_path}'
-            }), 404
+            
+            # 尝试其他可能的路径
+            alternative_paths = []
+            
+            # 1. 尝试直接在模型目录下查找文件
+            if model_dir and file_name:
+                # 尝试不同的文件名格式
+                possible_filenames = [
+                    file_name,
+                    file_name.replace('_zh.png', '.png'),
+                    file_name.replace('.png', '_zh.png'),
+                    # 添加其他可能的格式...
+                ]
+                
+                for possible_file in possible_filenames:
+                    alt_path = os.path.join(model_dir, possible_file)
+                    alternative_paths.append(alt_path)
+            
+            # 2. 尝试在模型的父目录查找
+            if model_dir and file_name:
+                parent_dir = os.path.dirname(model_dir)
+                alt_path = os.path.join(parent_dir, file_name)
+                alternative_paths.append(alt_path)
+            
+            # 尝试所有替代路径
+            for alt_path in alternative_paths:
+                if os.path.exists(alt_path):
+                    full_path = alt_path
+                    print(f"找到替代路径: {full_path}")
+                    break
+            
+            # 如果仍然找不到文件
+            if not os.path.exists(full_path):
+                return jsonify({
+                    'success': False,
+                    'message': f'图片不存在: {image_path}'
+                }), 404
             
         # 检查是否为图片文件
         if not full_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):

@@ -20,6 +20,14 @@ export function getRecentModelsService() {
   })
 }
 
+// 获取最新训练的模型
+export function getLatestModelService() {
+  return request({
+    url: '/transformer/latest_model',
+    method: 'get'
+  })
+}
+
 // 获取模型结果
 export function getModelResultService(modelPath) {
   return request({

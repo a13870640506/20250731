@@ -428,6 +428,7 @@ const startTraining = async (fromParamTab) => {
           selectedModelPath.value = trainingResult.value.model_dir
         }
 
+
         // 训练成功后，刷新最近模型列表
         loadRecentModels()
       } else {
