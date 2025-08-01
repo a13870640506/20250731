@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElLoading } from 'element-plus'
 import { getModelResultService, getRecentModelsService, getLatestModelService } from '@/api/transformer'
+import { baseURL } from '@/utils/request'
 
 // 模型选择相关
 const selectedModelPath = ref('')
@@ -133,7 +134,7 @@ const loadModelResult = async (modelPath) => {
       console.log('成功获取模型结果:', response.data.data)
 
       // 构建图片路径 - 使用API接口访问图片
-      const baseApiUrl = `${import.meta.env.VITE_API_URL || ''}/transformer/model_image?path=`
+      const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/model_image?path=`
       console.log('API基础URL:', baseApiUrl)
       const parameters = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
 
@@ -314,12 +315,6 @@ onMounted(async () => {
             </el-button>
 
             <div v-if="modelResult" class="model-info-section">
-              <el-divider>模型信息</el-divider>
-              <div class="model-info-item">
-                <span class="info-label">模型路径:</span>
-                <span class="info-value">{{ modelResult.model_path }}</span>
-              </div>
-
               <el-divider>评估指标</el-divider>
               <el-tabs type="card" size="small">
                 <el-tab-pane label="训练集">
@@ -398,14 +393,17 @@ onMounted(async () => {
               <template v-if="activeTab === 'prediction'">
                 <div v-for="(item, index) in modelResult.imageData" :key="index" class="chart-item"
                   v-show="selectedParameter === 'all' || selectedParameter === item.param">
-                  <h3>{{ item.param }} - 训练集预测</h3>
-                  <div class="chart-image">
-                    <img :src="item.images.prediction.train" :alt="item.param + '训练集预测'" />
-                  </div>
-
-                  <h3>{{ item.param }} - 测试集预测</h3>
-                  <div class="chart-image">
-                    <img :src="item.images.prediction.test" :alt="item.param + '测试集预测'" />
+                  <div class="chart-row">
+                    <div class="chart-column">
+                      <div class="chart-image">
+                        <img :src="item.images.prediction.train" :alt="item.param + '训练集预测'" />
+                      </div>
+                    </div>
+                    <div class="chart-column">
+                      <div class="chart-image">
+                        <img :src="item.images.prediction.test" :alt="item.param + '测试集预测'" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -414,7 +412,6 @@ onMounted(async () => {
               <template v-else-if="activeTab === 'combined'">
                 <div v-for="(item, index) in modelResult.imageData" :key="index" class="chart-item"
                   v-show="selectedParameter === 'all' || selectedParameter === item.param">
-                  <h3>{{ item.param }} - 联合对比</h3>
                   <div class="chart-image">
                     <img :src="item.images.combined.all" :alt="item.param + '联合对比'" />
                   </div>
@@ -425,14 +422,17 @@ onMounted(async () => {
               <template v-else-if="activeTab === 'error'">
                 <div v-for="(item, index) in modelResult.imageData" :key="index" class="chart-item"
                   v-show="selectedParameter === 'all' || selectedParameter === item.param">
-                  <h3>{{ item.param }} - 训练集误差</h3>
-                  <div class="chart-image">
-                    <img :src="item.images.error.train" :alt="item.param + '训练集误差'" />
-                  </div>
-
-                  <h3>{{ item.param }} - 测试集误差</h3>
-                  <div class="chart-image">
-                    <img :src="item.images.error.test" :alt="item.param + '测试集误差'" />
+                  <div class="chart-row">
+                    <div class="chart-column">
+                      <div class="chart-image">
+                        <img :src="item.images.error.train" :alt="item.param + '训练集误差'" />
+                      </div>
+                    </div>
+                    <div class="chart-column">
+                      <div class="chart-image">
+                        <img :src="item.images.error.test" :alt="item.param + '测试集误差'" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -463,18 +463,22 @@ onMounted(async () => {
 
   .model-info-item {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
     margin-bottom: 10px;
 
     .info-label {
       font-weight: bold;
       color: #606266;
-      margin-bottom: 5px;
+      margin-right: 5px;
+      white-space: nowrap;
     }
 
     .info-value {
-      word-break: break-all;
       color: #303133;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 
@@ -577,6 +581,16 @@ onMounted(async () => {
       color: #303133;
       text-align: center;
     }
+  }
+
+  .chart-row {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+  }
+
+  .chart-column {
+    flex: 1;
   }
 
   .chart-image {
