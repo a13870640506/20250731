@@ -361,7 +361,35 @@ def get_model_result():
                         'r2': 0.89,
                         'mape': 7.8
                     }
-        
+
+        # 1.5 解析每个参数的详细指标
+        detail_path = os.path.join(full_path, 'training_result.json')
+        if os.path.exists(detail_path):
+            try:
+                with open(detail_path, 'r', encoding='utf-8') as f:
+                    detail_json = json.load(f)
+                metrics_info = detail_json.get('metrics', {})
+
+                def split_metrics(data_dict):
+                    overall = data_dict.get('overall', {})
+                    detail = {k: v for k, v in data_dict.items() if k != 'overall'}
+                    return overall, detail
+
+                if isinstance(metrics_info, dict):
+                    if 'train' in metrics_info:
+                        overall, detail = split_metrics(metrics_info.get('train', {}))
+                        result.setdefault('train_metrics', overall)
+                        result['train_metrics_detail'] = detail
+                    if 'val' in metrics_info:
+                        overall, detail = split_metrics(metrics_info.get('val', {}))
+                        result.setdefault('val_metrics', overall)
+                        result['val_metrics_detail'] = detail
+                    if 'test' in metrics_info:
+                        overall, detail = split_metrics(metrics_info.get('test', {}))
+                        result.setdefault('test_metrics', overall)
+                        result['test_metrics_detail'] = detail
+            except Exception as e:
+                print(f"解析训练结果详情失败: {e}")
         # 2. 加载训练参数
         params_path = os.path.join(full_path, 'training_params.json')
         print(f"尝试加载训练参数: {params_path}")

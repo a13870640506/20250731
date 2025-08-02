@@ -1,0 +1,18 @@
+{
+  "model_path": "./models\\models\\model_c256_lr0.000092_bs16",
+  "input_params": {
+    "poisson_ratio": 0.39,
+    "friction_angle": 26.94,
+    "cohesion": 0.58,
+    "dilation_angle": 8.47,
+    "elastic_modulus": 16.13
+  },
+  "prediction_results": {
+    "crown_settlement1": -0.4664062261581421,
+    "crown_settlement2": -0.45058777928352356,
+    "convergence1": -0.07725682109594345,
+    "convergence2": -0.1076798215508461,
+    "foot_settlement": -0.3995524048805237
+  },
+  "prediction_time_ms": 133
+}

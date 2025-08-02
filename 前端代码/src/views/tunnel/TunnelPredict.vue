@@ -1,8 +1,14 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { InfoFilled } from '@element-plus/icons-vue'
-import { predictService, getTunnelModelsService } from '@/api/transformer'
+import { ElMessage, ElDialog, ElMessageBox } from 'element-plus'
+import { InfoFilled, Timer, Clock, Document, Delete } from '@element-plus/icons-vue'
+import {
+  predictService,
+  getTunnelModelsService,
+  getPredictionHistoryService,
+  deletePredictionHistoryService,
+  getPredictionDetailService
+} from '@/api/transformer'
 
 // 创建响应式数据存储用户输入的围岩参数
 const inputParams = reactive({
@@ -20,6 +26,7 @@ const predictionResult = reactive({
   convergence1: null,       // 周边收敛1（mm）
   convergence2: null,       // 周边收敛2（mm）
   footSettlement: null,     // 拱脚下沉1（mm）
+  predictionTime: null,     // 预测耗时（ms）
   metrics: {
     r2: null,
     mse: null,
@@ -32,6 +39,11 @@ const modelData = reactive({
   modelPath: '',
   availableModels: []
 })
+
+// 历史预测记录
+const predictionHistory = ref([])
+const historyDialogVisible = ref(false)
+const loadingHistory = ref(false)
 
 // 加载状态
 const isLoading = ref(false)
@@ -94,13 +106,13 @@ const predict = async () => {
       }
     }
 
-
     // 发送预测请求
     const res = await predictService(requestData)
     console.log('预测响应:', res)
 
     if (res.data && res.data.success) {
-      ElMessage.success('预测成功')
+      // 提取预测时间
+      const predictionTimeMs = res.data.data.prediction_time_ms || 0
 
       // 更新预测结果
       const data = res.data.data
@@ -109,6 +121,7 @@ const predict = async () => {
       predictionResult.convergence1 = data.convergence1
       predictionResult.convergence2 = data.convergence2
       predictionResult.footSettlement = data.foot_settlement
+      predictionResult.predictionTime = predictionTimeMs
 
       // 更新评估指标
       predictionResult.metrics = data.metrics || {
@@ -119,6 +132,12 @@ const predict = async () => {
 
       // 显示结果
       showResult.value = true
+
+      // 显示成功消息，包含预测时间
+      ElMessage.success(`预测成功，耗时${predictionTimeMs}ms`)
+
+      // 刷新历史记录
+      fetchPredictionHistory()
     } else {
       ElMessage.error(res.data?.message || '预测失败')
     }
@@ -127,6 +146,129 @@ const predict = async () => {
     console.error('预测错误:', error)
   } finally {
     isLoading.value = false
+  }
+}
+
+// 获取历史预测记录
+const fetchPredictionHistory = async () => {
+  try {
+    loadingHistory.value = true
+    const res = await getPredictionHistoryService()
+    if (res.data && res.data.success) {
+      predictionHistory.value = res.data.data || []
+    } else {
+      console.warn('获取历史预测记录失败:', res.data?.message)
+    }
+  } catch (error) {
+    console.error('获取历史预测记录错误:', error)
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+// 打开历史预测记录对话框
+const openHistoryDialog = () => {
+  fetchPredictionHistory()
+  historyDialogVisible.value = true
+}
+
+// 查看历史记录详情
+const viewHistoryDetail = async (record) => {
+  try {
+    if (!record || !record.id) {
+      ElMessage.warning('记录ID无效')
+      return
+    }
+
+    ElMessage.info('正在加载预测记录详情...')
+
+    // 获取预测记录详情
+    const res = await getPredictionDetailService(record.id)
+
+    if (res.data && res.data.success) {
+      // 显示详情数据
+      const detailData = res.data.data
+
+      // 填充输入参数
+      if (detailData.input_params) {
+        inputParams.poissonRatio = detailData.input_params.poisson_ratio
+        inputParams.frictionAngle = detailData.input_params.friction_angle
+        inputParams.cohesion = detailData.input_params.cohesion
+        inputParams.dilationAngle = detailData.input_params.dilation_angle
+        inputParams.elasticModulus = detailData.input_params.elastic_modulus
+      }
+
+      // 填充预测结果
+      if (detailData.prediction_results) {
+        predictionResult.crownSettlement1 = detailData.prediction_results.crown_settlement1
+        predictionResult.crownSettlement2 = detailData.prediction_results.crown_settlement2
+        predictionResult.convergence1 = detailData.prediction_results.convergence1
+        predictionResult.convergence2 = detailData.prediction_results.convergence2
+        predictionResult.footSettlement = detailData.prediction_results.foot_settlement
+        predictionResult.predictionTime = detailData.prediction_time_ms
+      }
+
+      // 如果模型路径存在于可用模型列表中，则选择该模型
+      if (detailData.model_path && modelData.availableModels.some(model => model.path === detailData.model_path)) {
+        modelData.modelPath = detailData.model_path
+      }
+
+      // 显示结果
+      showResult.value = true
+
+      // 关闭对话框
+      historyDialogVisible.value = false
+
+      // 提示用户
+      ElMessage.success('已加载历史预测记录')
+    } else {
+      ElMessage.error(res.data?.message || '获取预测记录详情失败')
+    }
+  } catch (error) {
+    ElMessage.error(`获取预测记录详情失败: ${error.message}`)
+    console.error('获取预测记录详情错误:', error)
+  }
+}
+
+// 删除历史记录
+const deleteHistoryRecord = async (record) => {
+  try {
+    if (!record || !record.id) {
+      ElMessage.warning('记录ID无效')
+      return
+    }
+
+    // 使用Element Plus确认对话框
+    try {
+      await ElMessageBox.confirm(
+        `确定要删除ID为${record.id}的预测记录吗？`,
+        '删除确认',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+
+      // 用户点击了确认，执行删除操作
+      const res = await deletePredictionHistoryService(record.id)
+
+      if (res.data && res.data.success) {
+        ElMessage.success('预测记录已删除')
+        // 刷新历史记录列表
+        fetchPredictionHistory()
+      } else {
+        ElMessage.error(res.data?.message || '删除预测记录失败')
+      }
+    } catch (e) {
+      // 用户取消了删除操作
+      if (e !== 'cancel') {
+        console.error('确认对话框错误:', e)
+      }
+    }
+  } catch (error) {
+    ElMessage.error(`删除预测记录失败: ${error.message}`)
+    console.error('删除预测记录错误:', error)
   }
 }
 
@@ -141,9 +283,16 @@ const formatNumber = (num) => {
   return num.toFixed(4)
 }
 
-// 组件挂载时获取模型列表
+// 格式化日期时间
+const formatDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return 'N/A'
+  return dateTimeStr
+}
+
+// 组件挂载时获取模型列表和历史记录
 onMounted(() => {
   fetchAvailableModels()
+  fetchPredictionHistory()
 })
 </script>
 
@@ -207,6 +356,14 @@ onMounted(() => {
           <template #header>
             <div class="card-header">
               <span>位移预测结果</span>
+              <div class="header-actions">
+                <el-button type="primary" plain size="small" @click="openHistoryDialog">
+                  <el-icon>
+                    <Document />
+                  </el-icon>
+                  <span>历史记录</span>
+                </el-button>
+              </div>
             </div>
           </template>
 
@@ -216,6 +373,14 @@ onMounted(() => {
           </div>
 
           <div v-else class="result-content">
+            <!-- 预测时间显示 -->
+            <div class="prediction-time" v-if="predictionResult.predictionTime !== null">
+              <el-icon>
+                <Timer />
+              </el-icon>
+              <span>预测耗时: <strong>{{ predictionResult.predictionTime }}</strong> ms</span>
+            </div>
+
             <!-- 位移预测结果 -->
             <el-row :gutter="20" class="result-section">
               <el-col :span="12">
@@ -272,6 +437,55 @@ onMounted(() => {
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 历史预测记录对话框 -->
+    <el-dialog v-model="historyDialogVisible" title="历史预测记录" width="80%" destroy-on-close>
+      <div v-loading="loadingHistory">
+        <div v-if="predictionHistory.length === 0" class="empty-history">
+          <el-empty description="暂无历史预测记录" />
+        </div>
+        <el-table v-else :data="predictionHistory" style="width: 100%" max-height="500" border>
+          <el-table-column prop="id" label="ID" width="60" />
+          <el-table-column prop="timestamp" label="预测时间" width="160" />
+          <el-table-column label="输入参数" width="280">
+            <template #default="scope">
+              <p><strong>泊松比:</strong> {{ scope.row.input_params.poisson_ratio }}</p>
+              <p><strong>内摩擦角(°):</strong> {{ scope.row.input_params.friction_angle }}</p>
+              <p><strong>粘聚力(MPa):</strong> {{ scope.row.input_params.cohesion }}</p>
+              <p><strong>剪胀角(°):</strong> {{ scope.row.input_params.dilation_angle }}</p>
+              <p><strong>弹性模量(MPa):</strong> {{ scope.row.input_params.elastic_modulus }}</p>
+            </template>
+          </el-table-column>
+          <el-table-column label="预测结果">
+            <template #default="scope">
+              <p><strong>拱顶下沉1(mm):</strong> {{ formatNumber(scope.row.prediction_results.crown_settlement1) }}</p>
+              <p><strong>拱顶下沉2(mm):</strong> {{ formatNumber(scope.row.prediction_results.crown_settlement2) }}</p>
+              <p><strong>周边收敛1(mm):</strong> {{ formatNumber(scope.row.prediction_results.convergence1) }}</p>
+              <p><strong>周边收敛2(mm):</strong> {{ formatNumber(scope.row.prediction_results.convergence2) }}</p>
+              <p><strong>拱脚下沉(mm):</strong> {{ formatNumber(scope.row.prediction_results.foot_settlement) }}</p>
+            </template>
+          </el-table-column>
+          <el-table-column prop="prediction_time_ms" label="预测耗时(ms)" width="120" />
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="scope">
+              <div class="action-buttons">
+                <el-button type="primary" size="small" @click="viewHistoryDetail(scope.row)">查看</el-button>
+                <el-button type="danger" size="small" @click="deleteHistoryRecord(scope.row)">
+                  <el-icon>
+                    <Delete />
+                  </el-icon>
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="historyDialogVisible = false">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -282,6 +496,14 @@ onMounted(() => {
   .card-header {
     font-size: 18px;
     font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
   }
 
   .input-card,
@@ -312,6 +534,27 @@ onMounted(() => {
 
   .result-content {
     padding: 10px;
+  }
+
+  .prediction-time {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    margin-bottom: 15px;
+    background-color: #f0f9eb;
+    border-radius: 4px;
+    color: #67c23a;
+    font-size: 14px;
+
+    .el-icon {
+      margin-right: 8px;
+      font-size: 18px;
+    }
+
+    strong {
+      font-weight: bold;
+      margin: 0 3px;
+    }
   }
 
   .section-title {
@@ -390,6 +633,19 @@ onMounted(() => {
         line-height: 1.5;
       }
     }
+  }
+
+  .empty-history {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
   }
 }
 </style>

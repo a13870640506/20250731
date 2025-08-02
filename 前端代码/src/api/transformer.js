@@ -112,3 +112,36 @@ export function getOptimizationResultService(optId) {
     method: 'get'
   })
 }
+
+// 保存预测记录
+export function savePredictionHistoryService(data) {
+  return request({
+    url: '/transformer/prediction_history',
+    method: 'post',
+    data
+  })
+}
+
+// 获取预测历史记录
+export function getPredictionHistoryService() {
+  return request({
+    url: '/transformer/prediction_history',
+    method: 'get'
+  })
+}
+
+// 删除预测历史记录
+export function deletePredictionHistoryService(predictionId) {
+  return request({
+    url: `/transformer/prediction_history/${predictionId}`,
+    method: 'delete'
+  })
+}
+
+// 获取预测记录详情
+export function getPredictionDetailService(predictionId) {
+  return request({
+    url: `/transformer/prediction_detail/${predictionId}`,
+    method: 'get'
+  })
+}

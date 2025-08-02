@@ -69,56 +69,42 @@ const errorTableData = computed(() => {
   const data = []
   const parameters = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
 
-  // 为每个参数添加一行
+  const detailKey = `${selectedDataset.value}_metrics_detail`
+  const overallKey = `${selectedDataset.value}_metrics`
+
   parameters.forEach(param => {
-    // 只显示选定的参数或全部参数
     if (selectedParameter.value === 'all' || selectedParameter.value === param) {
-      const trainMetrics = sanitizeMetrics(
-        modelResult.value.train_metrics_detail?.[param] || modelResult.value.train_metrics || {}
-      )
-      const valMetrics = sanitizeMetrics(
-        modelResult.value.val_metrics_detail?.[param] || modelResult.value.val_metrics || {}
-      )
-      const testMetrics = sanitizeMetrics(
-        modelResult.value.test_metrics_detail?.[param] || modelResult.value.test_metrics || {}
+      const metrics = sanitizeMetrics(
+        modelResult.value[detailKey]?.[param] || modelResult.value[overallKey] || {}
       )
 
       data.push({
         parameter: param,
-        train_r2: trainMetrics.r2 ?? 'N/A',
-        train_mse: trainMetrics.mse ?? 'N/A',
-        train_mape: trainMetrics.mape ?? 'N/A',
-        val_r2: valMetrics.r2 ?? 'N/A',
-        val_mse: valMetrics.mse ?? 'N/A',
-        val_mape: valMetrics.mape ?? 'N/A',
-        test_r2: testMetrics.r2 ?? 'N/A',
-        test_mse: testMetrics.mse ?? 'N/A',
-        test_mape: testMetrics.mape ?? 'N/A'
+        r2: metrics.r2 ?? 'N/A',
+        mse: metrics.mse ?? 'N/A',
+        mape: metrics.mape ?? 'N/A'
       })
     }
   })
 
-  // 如果显示全部参数，添加一个总体行
   if (selectedParameter.value === 'all') {
-    const trainMetrics = sanitizeMetrics(modelResult.value.train_metrics || {})
-    const valMetrics = sanitizeMetrics(modelResult.value.val_metrics || {})
-    const testMetrics = sanitizeMetrics(modelResult.value.test_metrics || {})
+    const overallMetrics = sanitizeMetrics(modelResult.value[overallKey] || {})
 
     data.push({
       parameter: '总体',
-      train_r2: trainMetrics.r2 ?? 'N/A',
-      train_mse: trainMetrics.mse ?? 'N/A',
-      train_mape: trainMetrics.mape ?? 'N/A',
-      val_r2: valMetrics.r2 ?? 'N/A',
-      val_mse: valMetrics.mse ?? 'N/A',
-      val_mape: valMetrics.mape ?? 'N/A',
-      test_r2: testMetrics.r2 ?? 'N/A',
-      test_mse: testMetrics.mse ?? 'N/A',
-      test_mape: testMetrics.mape ?? 'N/A'
+      r2: overallMetrics.r2 ?? 'N/A',
+      mse: overallMetrics.mse ?? 'N/A',
+      mape: overallMetrics.mape ?? 'N/A'
     })
   }
 
   return data
+})
+
+// 当前数据集标签
+const datasetLabel = computed(() => {
+  const opt = datasetOptions.find(o => o.value === selectedDataset.value)
+  return opt ? `${opt.label}` : ''
 })
 
 // 加载最近训练的模型列表
@@ -322,59 +308,20 @@ onMounted(() => {
               <el-table :data="errorTableData" border size="small" style="width: 100%; margin-bottom: 20px;">
                 <el-table-column prop="parameter" label="参数" width="90" fixed="left" align="center" />
 
-                <!-- 训练集指标 -->
-                <el-table-column label="训练集" align="center">
+                <el-table-column :label="datasetLabel" align="center">
                   <el-table-column label="R²" width="80" align="center">
                     <template #default="scope">
-                      {{ formatNumber(scope.row.train_r2, 'r2') }}
+                      {{ formatNumber(scope.row.r2, 'r2') }}
                     </template>
                   </el-table-column>
                   <el-table-column label="MSE" width="80" align="center">
                     <template #default="scope">
-                      {{ formatNumber(scope.row.train_mse, 'mse') }}
+                      {{ formatNumber(scope.row.mse, 'mse') }}
                     </template>
                   </el-table-column>
                   <el-table-column label="MAPE" width="80" align="center">
                     <template #default="scope">
-                      {{ formatNumber(scope.row.train_mape, 'mape') }}
-                    </template>
-                  </el-table-column>
-                </el-table-column>
-
-                <!-- 验证集指标 -->
-                <el-table-column label="验证集" align="center">
-                  <el-table-column label="R²" width="80" align="center">
-                    <template #default="scope">
-                      {{ formatNumber(scope.row.val_r2, 'r2') }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="MSE" width="80" align="center">
-                    <template #default="scope">
-                      {{ formatNumber(scope.row.val_mse, 'mse') }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="MAPE" width="80" align="center">
-                    <template #default="scope">
-                      {{ formatNumber(scope.row.val_mape, 'mape') }}
-                    </template>
-                  </el-table-column>
-                </el-table-column>
-
-                <!-- 测试集指标 -->
-                <el-table-column label="测试集" align="center">
-                  <el-table-column label="R²" width="80" align="center">
-                    <template #default="scope">
-                      {{ formatNumber(scope.row.test_r2, 'r2') }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="MSE" width="80" align="center">
-                    <template #default="scope">
-                      {{ formatNumber(scope.row.test_mse, 'mse') }}
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="MAPE" width="80" align="center">
-                    <template #default="scope">
-                      {{ formatNumber(scope.row.test_mape, 'mape') }}
+                      {{ formatNumber(scope.row.mape, 'mape') }}
                     </template>
                   </el-table-column>
                 </el-table-column>

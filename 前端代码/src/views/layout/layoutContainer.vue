@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { computed } from 'vue'
 import { onMounted } from 'vue'
 import { baseURL } from '@/utils/request'
+import { PieChart, DataLine, Histogram } from '@element-plus/icons-vue'
 
 // 在页面实时更新时间
 const currentTime = ref(new Date());
@@ -71,12 +72,21 @@ const currentIp = ipMatch ? ipMatch[0] : "未连接";
                         <span>数据可视化</span>
                     </template>
                     <el-menu-item index="/visual/chart">
+                        <el-icon>
+                            <PieChart />
+                        </el-icon>
                         <span>训练结果详情</span>
                     </el-menu-item>
                     <el-menu-item index="/visual/compare">
+                        <el-icon>
+                            <DataLine />
+                        </el-icon>
                         <span>结果对比</span>
                     </el-menu-item>
                     <el-menu-item index="/visual/history">
+                        <el-icon>
+                            <Histogram />
+                        </el-icon>
                         <span>历史数据集</span>
                     </el-menu-item>
                 </el-sub-menu>
