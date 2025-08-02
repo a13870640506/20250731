@@ -6,11 +6,11 @@ import { predictService, getTunnelModelsService } from '@/api/transformer'
 
 // 创建响应式数据存储用户输入的围岩参数
 const inputParams = reactive({
-  poissonRatio: 0.3,        // 泊松比
-  frictionAngle: 30,        // 内摩擦角（°）
-  cohesion: 0.5,            // 粘聚力（Mpa）
-  dilationAngle: 5,         // 剪胀角（°）
-  elasticModulus: 2000      // 弹性模量（MPa）
+  poissonRatio: 0.39,        // 泊松比
+  frictionAngle: 26.94,        // 内摩擦角（°）
+  cohesion: 0.475,            // 粘聚力（Mpa）
+  dilationAngle: 8.47,         // 剪胀角（°）
+  elasticModulus: 16.13      // 弹性模量（MPa）
 })
 
 // 预测结果
@@ -79,17 +79,21 @@ const predict = async () => {
       elasticModulus: inputParams.elasticModulus
     })
 
-    // 准备请求数据
+    // 每次新预测前先清空旧结果
+    showResult.value = false
+
+    // 准备请求数据（确保为数字类型）
     const requestData = {
       model_path: modelData.modelPath,
       input_params: {
-        poisson_ratio: inputParams.poissonRatio,
-        friction_angle: inputParams.frictionAngle,
-        cohesion: inputParams.cohesion,
-        dilation_angle: inputParams.dilationAngle,
-        elastic_modulus: inputParams.elasticModulus
+        poisson_ratio: Number(inputParams.poissonRatio),
+        friction_angle: Number(inputParams.frictionAngle),
+        cohesion: Number(inputParams.cohesion),
+        dilation_angle: Number(inputParams.dilationAngle),
+        elastic_modulus: Number(inputParams.elasticModulus)
       }
     }
+
 
     // 发送预测请求
     const res = await predictService(requestData)
@@ -185,7 +189,7 @@ onMounted(() => {
             </el-form-item>
 
             <el-form-item label="弹性模量 (MPa)">
-              <el-input-number v-model="inputParams.elasticModulus" :min="500" :max="10000" :step="100"
+              <el-input-number v-model="inputParams.elasticModulus" :min="0" :max="10000" :step="100"
                 style="width: 100%" />
             </el-form-item>
 
@@ -214,10 +218,6 @@ onMounted(() => {
           <div v-else class="result-content">
             <!-- 位移预测结果 -->
             <el-row :gutter="20" class="result-section">
-              <el-col :span="24">
-                <h3 class="section-title">隧道位移预测值</h3>
-              </el-col>
-
               <el-col :span="12">
                 <div class="result-item">
                   <div class="result-label">拱顶下沉1 (mm):</div>
@@ -250,35 +250,6 @@ onMounted(() => {
                 <div class="result-item">
                   <div class="result-label">拱脚下沉 (mm):</div>
                   <div class="result-value">{{ formatNumber(predictionResult.footSettlement) }}</div>
-                </div>
-              </el-col>
-            </el-row>
-
-            <!-- 评估指标 -->
-            <el-row :gutter="20" class="result-section metrics-section" v-if="predictionResult.metrics.r2 !== null">
-              <el-col :span="24">
-                <h3 class="section-title">模型评估指标</h3>
-              </el-col>
-
-              <el-col :span="8">
-                <div class="metric-item">
-                  <div class="metric-label">决定系数 (R²):</div>
-                  <div class="metric-value">{{ formatNumber(predictionResult.metrics.r2) }}</div>
-                </div>
-              </el-col>
-
-              <el-col :span="8">
-                <div class="metric-item">
-                  <div class="metric-label">均方误差 (MSE):</div>
-                  <div class="metric-value">{{ formatNumber(predictionResult.metrics.mse) }}</div>
-                </div>
-              </el-col>
-
-              <el-col :span="8">
-                <div class="metric-item">
-                  <div class="metric-label">平均绝对百分比误差 (MAPE):</div>
-                  <div class="metric-value">{{ predictionResult.metrics.mape ?
-                    `${formatNumber(predictionResult.metrics.mape)}%` : 'N/A' }}</div>
                 </div>
               </el-col>
             </el-row>

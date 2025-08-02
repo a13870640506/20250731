@@ -19,6 +19,7 @@ MODEL_DIR = './models'
 SCALER_DIR = './scalers'
 
 
+
 def _build_sequence(poisson_ratio, friction_angle, cohesion, dilation_angle,
                     elastic_modulus, input_scaler, device):
     """根据单次输入构造伪时序数据并完成标准化"""
@@ -47,6 +48,7 @@ def _build_sequence(poisson_ratio, friction_angle, cohesion, dilation_angle,
     deltas_tensor = torch.from_numpy(deltas_norm).unsqueeze(0).to(device)
     mask_tensor = torch.from_numpy(mask).unsqueeze(0).to(device)
     return values_tensor, deltas_tensor, mask_tensor
+
 
 
 @tunnel_predict_bp.route('/models', methods=['GET'])
@@ -234,20 +236,22 @@ def predict_displacement():
                 input_scaler,
                 device
             )
+            # Transformer需要True表示填充位置，需对掩码取反
+            transformer_mask = ~mask_tensor.bool()
         except Exception as e:
             return jsonify({
                 'success': False,
                 'message': f'准备输入数据失败: {str(e)}'
             })
-        
+
         # 执行预测
         try:
             with torch.no_grad():
-                output = model(values_tensor, deltas_tensor, mask_tensor)
-                
+                output = model(values_tensor, deltas_tensor, transformer_mask)
+
             # 转换为numpy数组
             output_np = output.cpu().numpy()
-            
+
             # 反标准化输出
             prediction = output_scaler.inverse_transform(output_np)[0]  # 取第一个样本
             
@@ -264,12 +268,7 @@ def predict_displacement():
                 'crown_settlement2': crown_settlement2,
                 'convergence1': convergence1,
                 'convergence2': convergence2,
-                'foot_settlement': foot_settlement,
-                'metrics': {
-                    'r2': 0.95,  # 模型的整体R2值（示例）
-                    'mse': 0.01,  # 模型的整体MSE值（示例）
-                    'mape': 5.2   # 模型的整体MAPE值（示例）
-                }
+                'foot_settlement': foot_settlement
             }
             
             return jsonify({

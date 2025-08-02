@@ -84,9 +84,10 @@ def train_model_api():
             'message': f'模型训练失败: {str(e)}'
         })
 
-# 模型预测接口
-@model_training_bp.route('/predict', methods=['POST'])
-def predict():
+# 基于文件的模型预测接口
+# 为避免与隧道位移预测接口冲突，调整路由路径
+@model_training_bp.route('/file_predict', methods=['POST'])
+def file_predict():
     try:
         # 获取预测参数
         data_file = request.files.get('data_file')
