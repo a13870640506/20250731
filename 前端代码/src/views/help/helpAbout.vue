@@ -151,7 +151,8 @@ onMounted(() => {
               </el-icon>
             </div>
 
-            <div class="feature-detail" v-show="activeFeature === 'data' || activeFeature === 'all'">
+            <div class="feature-detail"
+              :style="{ maxHeight: activeFeature === 'data' || activeFeature === 'all' ? '500px' : '0', opacity: activeFeature === 'data' || activeFeature === 'all' ? '1' : '0' }">
               <div class="detail-card">
                 <p>系统支持上传CSV格式的数据文件，包含输入特征（如泊松比、内摩擦角、粘聚力等）和输出标签（如拱顶下沉、周边收敛等）。上传后系统会自动进行数据处理，包括：</p>
                 <ul>
@@ -180,7 +181,8 @@ onMounted(() => {
               </el-icon>
             </div>
 
-            <div class="feature-detail" v-show="activeFeature === 'param' || activeFeature === 'all'">
+            <div class="feature-detail"
+              :style="{ maxHeight: activeFeature === 'param' || activeFeature === 'all' ? '500px' : '0', opacity: activeFeature === 'param' || activeFeature === 'all' ? '1' : '0' }">
               <div class="detail-card">
                 <p>系统采用Optuna贝叶斯优化算法，自动搜索最佳的模型超参数组合，包括：</p>
                 <ul>
@@ -211,7 +213,8 @@ onMounted(() => {
               </el-icon>
             </div>
 
-            <div class="feature-detail" v-show="activeFeature === 'predict' || activeFeature === 'all'">
+            <div class="feature-detail"
+              :style="{ maxHeight: activeFeature === 'predict' || activeFeature === 'all' ? '500px' : '0', opacity: activeFeature === 'predict' || activeFeature === 'all' ? '1' : '0' }">
               <div class="detail-card">
                 <p>基于训练好的Transformer模型，输入围岩物理参数，预测隧道各部位位移：</p>
                 <ul>
@@ -324,6 +327,7 @@ onMounted(() => {
           font-size: 22px;
           background: linear-gradient(90deg, #1890ff, #52c41a);
           -webkit-background-clip: text;
+          background-clip: text;
           -webkit-text-fill-color: transparent;
           font-weight: 600;
         }
@@ -387,39 +391,68 @@ onMounted(() => {
 
   .feature-card {
     height: 100%;
-    border-radius: 10px;
+    border-radius: 16px;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    background: linear-gradient(to bottom, #ffffff, #f9fafc);
+    border: 1px solid #ebeef5;
 
     .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding: 16px 20px !important;
+      background: linear-gradient(135deg, #f0f5ff, #ffffff);
+      border-bottom: 1px solid #ebeef5;
 
       .header-title {
         display: flex;
         align-items: center;
-        font-size: 16px;
-        font-weight: bold;
+        font-size: 18px;
+        font-weight: 600;
         color: #303133;
+
+        .el-icon {
+          margin-right: 12px;
+          font-size: 24px;
+          color: #409EFF;
+          background-color: #ecf5ff;
+          padding: 8px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+        }
+      }
+
+      .header-actions {
+        .el-button {
+          border-radius: 20px;
+          padding: 8px 16px;
+          font-weight: 500;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
       }
     }
 
     .feature-section {
-      margin-bottom: 8px;
-      border-radius: 8px;
+      margin-bottom: 16px;
+      border-radius: 12px;
       overflow: hidden;
-      transition: all 0.3s;
+      transition: all 0.3s ease-in-out;
       box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.03);
+      border: 1px solid #f0f0f0;
 
       &:last-child {
         margin-bottom: 0;
       }
 
       &.active {
-        box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.1);
+        box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+        border-color: #e6e6e6;
 
         .feature-item-card {
+          background-color: #f9fafc;
+
           .feature-content {
             h3 {
               color: #303133;
@@ -433,102 +466,157 @@ onMounted(() => {
         display: flex;
         align-items: center;
         background-color: white;
-        padding: 10px;
-        border-radius: 8px;
+        padding: 16px 20px;
+        border-radius: 12px 12px 0 0;
         position: relative;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: all 0.3s ease;
 
         &:hover {
-          background-color: #f9f9f9;
-          transform: translateY(-2px);
+          background-color: #f9fafc;
+
+          .expand-icon {
+            color: #409EFF;
+          }
         }
 
         .feature-icon-circle {
           color: white;
-          width: 36px;
-          height: 36px;
-          border-radius: 8px;
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
-          margin-right: 12px;
-          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+          margin-right: 16px;
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+          transition: transform 0.3s ease;
 
           .el-icon {
-            font-size: 18px;
+            font-size: 22px;
           }
+        }
+
+        &:hover .feature-icon-circle {
+          transform: scale(1.05);
         }
 
         .feature-content {
           flex: 1;
 
           h3 {
-            margin: 0 0 3px 0;
-            font-size: 15px;
+            margin: 0 0 6px 0;
+            font-size: 18px;
             color: #303133;
-            transition: color 0.3s;
+            transition: color 0.3s ease;
+            font-weight: 500;
           }
 
           p {
             margin: 0;
-            font-size: 13px;
+            font-size: 14px;
             color: #606266;
-            transition: color 0.3s;
+            transition: color 0.3s ease;
+            line-height: 1.5;
           }
         }
 
         .expand-icon {
           color: #909399;
-          font-size: 14px;
-          transition: transform 0.3s, color 0.3s;
+          font-size: 16px;
+          transition: transform 0.4s ease, color 0.3s ease;
+          margin-left: 12px;
+          background-color: #f5f7fa;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
 
           &.is-rotate {
             transform: rotate(180deg);
+            color: #409EFF;
+            background-color: #ecf5ff;
           }
         }
       }
 
       .feature-detail {
-        background-color: #fafafa;
+        background-color: #f9fafc;
         padding: 0;
-        border-radius: 0 0 8px 8px;
+        border-radius: 0 0 12px 12px;
         font-size: 16px;
-        border-top: 1px solid #f0f0f0;
+        border-top: 1px solid #ebeef5;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        max-height: 0;
+        opacity: 0;
+
+        &.v-enter-active,
+        &.v-leave-active {
+          transition: max-height 0.5s ease, opacity 0.3s ease;
+        }
+
+        &.v-enter-from,
+        &.v-leave-to {
+          max-height: 0;
+          opacity: 0;
+        }
+
+        &.v-enter-to,
+        &.v-leave-from {
+          max-height: 500px;
+          opacity: 1;
+        }
 
         .detail-card {
-          padding: 10px;
+          padding: 20px 24px;
+          background: linear-gradient(to bottom, #f9fafc, #ffffff);
+          box-shadow: inset 0 4px 8px -4px rgba(0, 0, 0, 0.03);
 
           p {
             margin-top: 0;
-            margin-bottom: 8px;
+            margin-bottom: 16px;
             color: #606266;
-            line-height: 1.5;
+            line-height: 1.6;
+            font-size: 15px;
           }
 
           ul {
             margin: 0;
-            padding-left: 20px;
+            padding-left: 10px;
             list-style-type: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-gap: 10px 20px;
 
             li {
-              margin-bottom: 5px;
+              margin-bottom: 10px;
               color: #606266;
               position: relative;
-              padding-left: 5px;
+              padding-left: 20px;
+              font-size: 15px;
+              line-height: 1.6;
+              display: flex;
+              align-items: flex-start;
 
               &::before {
-                content: '•';
-                color: #409EFF;
-                font-weight: bold;
-                display: inline-block;
-                width: 1em;
-                margin-left: -1em;
+                content: '';
+                position: absolute;
+                left: 0;
+                top: 8px;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background-color: #409EFF;
+                box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
               }
 
               .highlight {
                 color: #303133;
-                font-weight: 500;
+                font-weight: 600;
+                margin-right: 4px;
               }
             }
           }

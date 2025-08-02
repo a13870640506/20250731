@@ -77,6 +77,22 @@ const analyzeDataset = async () => {
     if (response.data && response.data.success) {
       const data = response.data.data
 
+      // 确保标准化处理图表数据格式正确
+      let standardizationPlots = [];
+      if (data.standardization_plots && Array.isArray(data.standardization_plots)) {
+        standardizationPlots = data.standardization_plots.map(plot => {
+          // 确保每个图表对象包含必要的字段
+          return {
+            name: plot.name || '未命名参数',
+            image: plot.image || null,  // 可能为空，将使用image_path
+            image_path: plot.image_path || '',
+            title: plot.title || plot.name || '标准化对比'
+          };
+        });
+
+        console.log("处理后的标准化图表数据:", standardizationPlots);
+      }
+
       // 构建分析结果
       analysisResult.value = {
         dataset_id: data.dataset_id,
@@ -86,36 +102,11 @@ const analyzeDataset = async () => {
         val_data: data.val_data,
         test_data: data.test_data,
 
-        // 统计信息（如果API没有提供，使用模拟数据）
-        statistics: data.statistics || {
-          input_features: Array(data.info.input_dim).fill(0).map((_, i) => ({
-            name: `特征${i + 1}`,
-            mean: (0.4 + Math.random() * 0.3).toFixed(3),
-            std: (0.1 + Math.random() * 0.15).toFixed(3),
-            min: (0.1 + Math.random() * 0.2).toFixed(3),
-            max: (0.7 + Math.random() * 0.2).toFixed(3)
-          })),
-          output_features: [
-            { name: '拱顶下沉', mean: 0.487, std: 0.156, min: 0.213, max: 0.843 },
-            { name: '拱顶下沉2', mean: 0.512, std: 0.143, min: 0.231, max: 0.867 },
-            { name: '周边收敛1', mean: 0.623, std: 0.112, min: 0.345, max: 0.912 },
-            { name: '周边收敛2', mean: 0.578, std: 0.134, min: 0.298, max: 0.876 },
-            { name: '拱脚下沉', mean: 0.432, std: 0.165, min: 0.187, max: 0.798 }
-          ]
-        },
-
-        // 标准化图表 - 只保留5个输入特征的标准化图
-        charts: data.standardization_plots ?
-          data.standardization_plots.filter(plot =>
-            ['泊松比', '内摩擦角', '粘聚力', '剪胀角', 'E'].includes(plot.name)
-          ) : [
-            { name: '泊松比', image_path: '' },
-            { name: '内摩擦角', image_path: '' },
-            { name: '粘聚力', image_path: '' },
-            { name: '剪胀角', image_path: '' },
-            { name: 'E', image_path: '' }
-          ]
+        // 标准化处理图表
+        standardization_plots: standardizationPlots
       }
+
+      console.log("标准化处理图表数据:", standardizationPlots)
 
       showAnalysis.value = true
       ElMessage.success('数据集分析完成')
@@ -132,36 +123,16 @@ const analyzeDataset = async () => {
   }
 }
 
-// 图表参数映射 - 输入特征
-const chartTitles = {
-  '泊松比': '泊松比',
-  '内摩擦角': '内摩擦角（°）',
-  '粘聚力': '粘聚力（Mpa）',
-  '剪胀角': '剪胀角（°）',
-  'E': '弹性模量（MPa）'
-}
-
 // 筛选选项
 const selectedPlot = ref('all')
-const plotOptions = [
-  { label: '全部参数', value: 'all' },
-  { label: '泊松比', value: '泊松比' },
-  { label: '内摩擦角（°）', value: '内摩擦角' },
-  { label: '粘聚力（Mpa）', value: '粘聚力' },
-  { label: '剪胀角（°）', value: '剪胀角' },
-  { label: '弹性模量（MPa）', value: 'E' }
-]
-
-// 获取图表标题
-const getChartTitle = (paramName) => {
-  return chartTitles[paramName] || paramName
-}
 
 // 获取图表URL
 const getImageUrl = (imagePath) => {
   if (!imagePath) return ''
+  // 确保API基础URL正确
   const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/dataset_image?path=`
-  return `${baseApiUrl}${imagePath}`
+  console.log("构建图片URL:", baseApiUrl + encodeURIComponent(imagePath))
+  return `${baseApiUrl}${encodeURIComponent(imagePath)}`
 }
 
 // 组件挂载时加载数据集列表
@@ -244,90 +215,43 @@ onMounted(() => {
         </div>
         <el-empty v-else description="无原始数据预览" />
 
-        <el-divider>输入特征统计</el-divider>
-        <div class="table-container">
-          <el-table :data="analysisResult.statistics.input_features" border style="width: 100%" height="300">
-            <el-table-column prop="name" label="特征名称" width="150" align="center" />
-            <el-table-column prop="mean" label="均值" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.mean === 'number' ? parseFloat(scope.row.mean).toFixed(3) : scope.row.mean }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="std" label="标准差" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.std === 'number' ? parseFloat(scope.row.std).toFixed(3) : scope.row.std }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="min" label="最小值" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.min === 'number' ? parseFloat(scope.row.min).toFixed(3) : scope.row.min }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="max" label="最大值" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.max === 'number' ? parseFloat(scope.row.max).toFixed(3) : scope.row.max }}
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
 
-        <el-divider>输出特征统计</el-divider>
-        <div class="table-container">
-          <el-table :data="analysisResult.statistics.output_features" border style="width: 100%" height="300">
-            <el-table-column prop="name" label="特征名称" width="150" align="center" />
-            <el-table-column prop="mean" label="均值" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.mean === 'number' ? parseFloat(scope.row.mean).toFixed(3) : scope.row.mean }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="std" label="标准差" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.std === 'number' ? parseFloat(scope.row.std).toFixed(3) : scope.row.std }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="min" label="最小值" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.min === 'number' ? parseFloat(scope.row.min).toFixed(3) : scope.row.min }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="max" label="最大值" width="150" align="center">
-              <template #default="scope">
-                {{ typeof scope.row.max === 'number' ? parseFloat(scope.row.max).toFixed(3) : scope.row.max }}
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
 
         <el-divider>标准化处理图表</el-divider>
         <div class="plot-filter-container">
           <div class="plot-filter">
             <span class="filter-label">筛选图表：</span>
-            <el-select v-model="selectedPlot" placeholder="选择参数" style="width: 250px">
+            <el-select v-model="selectedPlot" placeholder="选择图表" style="width: 250px">
               <el-option label="全部图表" value="all" />
-              <el-option v-for="(chart, index) in analysisResult.charts" :key="index" :label="getChartTitle(chart.name)"
-                :value="chart.name" />
+              <el-option v-for="(plot, index) in analysisResult.standardization_plots" :key="index" :label="plot.name"
+                :value="plot.name" />
             </el-select>
           </div>
         </div>
 
         <div class="standardization-plots">
-          <div v-for="(chart, index) in analysisResult.charts" :key="index" class="plot-item"
-            v-show="selectedPlot === 'all' || selectedPlot === chart.name">
-            <div class="plot-image-container">
-              <img v-if="chart.image_path" :src="getImageUrl(chart.image_path)"
-                :alt="`${getChartTitle(chart.name)}标准化对比`" class="plot-image" />
-              <div v-else class="placeholder-charts">
-                <p class="chart-placeholder">该参数没有可用的标准化处理图</p>
+          <div v-if="analysisResult.standardization_plots && analysisResult.standardization_plots.length > 0">
+            <div v-for="(plot, index) in analysisResult.standardization_plots" :key="index" class="plot-item"
+              v-show="selectedPlot === 'all' || selectedPlot === plot.name">
+              <div class="plot-image-container">
+                <img v-if="plot.image" :src="`data:image/png;base64,${plot.image}`" :alt="plot.name"
+                  class="plot-image" />
+                <img v-else-if="plot.image_path" :src="getImageUrl(plot.image_path)" :alt="plot.name"
+                  class="plot-image" />
+                <div v-else class="placeholder-charts">
+                  <p class="chart-placeholder">该参数没有可用的标准化处理图</p>
+                </div>
+              </div>
+              <div class="plot-footer">
+                <a v-if="plot.image_path"
+                  :href="`http://127.0.0.1:8000/download?path=${encodeURIComponent(plot.image_path)}`" target="_blank"
+                  class="download-link">
+                  下载高清图
+                </a>
               </div>
             </div>
-            <div class="plot-footer">
-              <p class="plot-title">{{ getChartTitle(chart.name) }} - 标准化对比</p>
-              <a v-if="chart.image_path" :href="`${baseURL}/download?path=${encodeURIComponent(chart.image_path)}`"
-                target="_blank" class="download-link">
-                下载高清图
-              </a>
-            </div>
           </div>
+          <el-empty v-else description="暂无标准化处理图表" />
         </div>
       </div>
     </el-card>
@@ -441,14 +365,8 @@ onMounted(() => {
       .plot-footer {
         margin-top: 10px;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
-
-        .plot-title {
-          font-size: 14px;
-          color: #606266;
-          margin: 0;
-        }
 
         .download-link {
           color: #409EFF;

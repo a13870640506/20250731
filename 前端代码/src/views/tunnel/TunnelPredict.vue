@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElDialog, ElMessageBox } from 'element-plus'
-import { InfoFilled, Timer, Clock, Document, Delete } from '@element-plus/icons-vue'
+import { InfoFilled, Timer, Clock, Document, Delete, View } from '@element-plus/icons-vue'
 import {
   predictService,
   getTunnelModelsService,
@@ -156,11 +156,14 @@ const fetchPredictionHistory = async () => {
     const res = await getPredictionHistoryService()
     if (res.data && res.data.success) {
       predictionHistory.value = res.data.data || []
+      console.log(`成功获取${predictionHistory.value.length}条历史预测记录`)
     } else {
       console.warn('获取历史预测记录失败:', res.data?.message)
+      ElMessage.warning('获取历史预测记录失败，请检查后端服务是否正常运行')
     }
   } catch (error) {
     console.error('获取历史预测记录错误:', error)
+    ElMessage.error(`获取历史预测记录失败: ${error.message}`)
   } finally {
     loadingHistory.value = false
   }
@@ -241,29 +244,37 @@ const deleteHistoryRecord = async (record) => {
     // 使用Element Plus确认对话框
     try {
       await ElMessageBox.confirm(
-        `确定要删除ID为${record.id}的预测记录吗？`,
+        `确定要删除ID为${record.id}的预测记录吗？此操作将同时删除服务器上存储的预测结果文件，且不可恢复。`,
         '删除确认',
         {
-          confirmButtonText: '确定',
+          confirmButtonText: '确定删除',
           cancelButtonText: '取消',
-          type: 'warning'
+          type: 'warning',
+          distinguishCancelAndClose: true,
+          closeOnClickModal: false
         }
       )
 
       // 用户点击了确认，执行删除操作
+      ElMessage.info('正在删除预测记录...')
       const res = await deletePredictionHistoryService(record.id)
 
       if (res.data && res.data.success) {
-        ElMessage.success('预测记录已删除')
+        ElMessage.success('预测记录及关联文件已成功删除')
+        console.log('删除成功，服务器返回:', res.data)
         // 刷新历史记录列表
         fetchPredictionHistory()
       } else {
         ElMessage.error(res.data?.message || '删除预测记录失败')
+        console.error('删除失败，服务器返回:', res.data)
       }
     } catch (e) {
       // 用户取消了删除操作
-      if (e !== 'cancel') {
+      if (e === 'cancel') {
+        ElMessage.info('已取消删除操作')
+      } else if (e !== 'close') {
         console.error('确认对话框错误:', e)
+        ElMessage.error('操作过程中发生错误')
       }
     }
   } catch (error) {
@@ -469,11 +480,17 @@ onMounted(() => {
           <el-table-column label="操作" width="160" fixed="right">
             <template #default="scope">
               <div class="action-buttons">
-                <el-button type="primary" size="small" @click="viewHistoryDetail(scope.row)">查看</el-button>
+                <el-button type="primary" size="small" @click="viewHistoryDetail(scope.row)">
+                  <el-icon>
+                    <View />
+                  </el-icon>
+                  <span>查看</span>
+                </el-button>
                 <el-button type="danger" size="small" @click="deleteHistoryRecord(scope.row)">
                   <el-icon>
                     <Delete />
                   </el-icon>
+                  <span>删除</span>
                 </el-button>
               </div>
             </template>

@@ -272,11 +272,30 @@ const addNewValue = () => {
   ElMessage.success('添加成功')
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 加载优化历史记录
-  loadOptimizationHistory()
+  await loadOptimizationHistory()
   // 加载数据集列表
-  loadDatasets()
+  await loadDatasets()
+
+  // 检查URL中是否有优化ID参数，如果有则自动加载对应的优化结果
+  const optId = route.query.id
+  if (optId) {
+    const detail = await getOptimizationDetail(optId)
+    if (detail) {
+      optimizationResult.value = {
+        best_params: detail.best_params,
+        metrics: detail.metrics,
+        optimization_id: detail.id,
+        curve_image: detail.curve_image,
+        curve_path: detail.curve_path,
+        csv_path: detail.csv_path,
+        trials: detail.trials
+      }
+      showResult.value = true
+      activeTab.value = 'result'
+    }
+  }
 })
 </script>
 

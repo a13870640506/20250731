@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElLoading, ElMessageBox } from 'element-plus'
-import { trainModelService, uploadDatasetService, getOptimizationHistoryService, getOptimizationResultService, getModelResultService, getRecentModelsService } from '@/api/transformer'
+import { trainModelService, uploadDatasetService, getOptimizationHistoryService, getOptimizationResultService, getModelResultService, getRecentModelsService, getDatasetsService } from '@/api/transformer'
 import { useRouter } from 'vue-router'
 import { ArrowRight, View, CopyDocument, Download } from '@element-plus/icons-vue'
 import { onBeforeMount } from 'vue'
@@ -30,6 +30,13 @@ const loadingOptResult = ref(false)
 
 // 前往超参数优化页面
 const goToOptimizationPage = () => {
+  // 保存当前数据处理状态到localStorage
+  if (dataProcessResult.value.data_path) {
+    localStorage.setItem('tunnelModelDataPath', dataProcessResult.value.data_path)
+    localStorage.setItem('tunnelModelDataResult', JSON.stringify(dataProcessResult.value))
+    localStorage.setItem('tunnelModelShowDataResult', 'true')
+  }
+
   router.push({
     path: '/param/optimization',
     query: {
@@ -124,6 +131,11 @@ const recentModelDates = ref([])
 // 选中的模型路径
 const selectedModelPath = ref('')
 const selectedModelResult = ref(null)
+
+// 数据集列表
+const datasets = ref([])
+const selectedDatasetPath = ref('')
+const loadingDatasets = ref(false)
 
 // 格式化数字，根据不同类型的指标使用不同的格式
 const formatNumber = (value, type = 'default') => {
@@ -307,6 +319,16 @@ const uploadDataset = async () => {
         // 生成模型保存路径
         generateModelSavePath()
 
+        // 保存数据处理状态到localStorage
+        if (dataProcessResult.value.data_path) {
+          localStorage.setItem('tunnelModelDataPath', dataProcessResult.value.data_path)
+          localStorage.setItem('tunnelModelDataResult', JSON.stringify(dataProcessResult.value))
+          localStorage.setItem('tunnelModelShowDataResult', 'true')
+
+          // 更新选中的数据集路径
+          selectedDatasetPath.value = dataProcessResult.value.data_path
+        }
+
         // 添加处理结果日志
         addLog("数据处理成功!")
         addLog(`训练集样本数: ${res.data.data.train_size}`)
@@ -337,7 +359,14 @@ const uploadDataset = async () => {
 
 // 确认是否开始训练
 const confirmTraining = (fromParamTab) => {
-  if (!showDataResult.value) {
+  if (fromParamTab) {
+    // 从参数定义页面开始训练，检查是否选择了数据集
+    if (!dataProcessResult.value.data_path) {
+      ElMessage.warning('请先选择数据集')
+      return
+    }
+  } else if (!showDataResult.value) {
+    // 从其他页面开始训练，检查是否完成了数据准备
     ElMessageBox.confirm(
       '您还未完成数据准备，是否先前往数据准备标签页进行数据处理？',
       '提示',
@@ -472,6 +501,36 @@ const loadRecentModels = async () => {
   }
 }
 
+// 加载数据集列表
+const loadDatasets = async () => {
+  try {
+    loadingDatasets.value = true
+    console.log("开始加载数据集列表...")
+    const res = await getDatasetsService()
+
+    if (res.data && res.data.success) {
+      datasets.value = res.data.data || []
+      console.log("成功加载数据集列表:", datasets.value)
+
+      // 如果当前已有数据集路径，则保持选中
+      if (dataProcessResult.value.data_path) {
+        selectedDatasetPath.value = dataProcessResult.value.data_path
+      } else if (datasets.value.length > 0) {
+        // 否则默认选择第一个数据集
+        selectedDatasetPath.value = datasets.value[0].path
+      }
+    } else {
+      console.error('获取数据集列表失败:', res.data?.message)
+      ElMessage.warning('获取数据集列表失败')
+    }
+  } catch (error) {
+    console.error('获取数据集列表错误:', error)
+    ElMessage.error('获取数据集列表失败')
+  } finally {
+    loadingDatasets.value = false
+  }
+}
+
 // 加载指定模型路径的结果
 const loadModelResult = async (modelPath) => {
   if (!modelPath) {
@@ -532,15 +591,77 @@ const copySelectedModelPath = () => {
     })
 }
 
+// 选择数据集后更新数据处理结果
+const handleDatasetSelect = async (datasetPath) => {
+  if (!datasetPath) return
+
+  // 查找选中的数据集信息
+  const selectedDataset = datasets.value.find(dataset => dataset.path === datasetPath)
+  if (!selectedDataset) return
+
+  // 更新数据处理结果
+  dataProcessResult.value = {
+    data_path: selectedDataset.path,
+    train_size: selectedDataset.info['训练集样本数'] || 0,
+    val_size: selectedDataset.info['验证集样本数'] || 0,
+    test_size: selectedDataset.info['测试集样本数'] || 0,
+    input_dim: selectedDataset.info['输入维度'] || 7,
+    output_dim: selectedDataset.info['输出维度'] || 5,
+    standardization_plots: selectedDataset.plots || []
+  }
+
+  // 更新模型参数中的输入输出维度
+  modelParams.value.input_dim = dataProcessResult.value.input_dim
+  modelParams.value.output_dim = dataProcessResult.value.output_dim
+
+  // 显示数据结果
+  showDataResult.value = true
+
+  // 生成模型保存路径
+  generateModelSavePath()
+
+  ElMessage.success(`已选择数据集: ${selectedDataset.date}`)
+}
+
+// 从localStorage恢复数据处理状态
+const restoreDataProcessState = () => {
+  try {
+    const savedDataPath = localStorage.getItem('tunnelModelDataPath')
+    const savedDataResult = localStorage.getItem('tunnelModelDataResult')
+    const savedShowDataResult = localStorage.getItem('tunnelModelShowDataResult')
+
+    if (savedDataPath && savedDataResult && savedShowDataResult === 'true') {
+      console.log("从localStorage恢复数据处理状态")
+      dataProcessResult.value = JSON.parse(savedDataResult)
+      selectedDatasetPath.value = savedDataPath
+      showDataResult.value = true
+
+      // 更新模型参数中的输入输出维度
+      if (dataProcessResult.value.input_dim) {
+        modelParams.value.input_dim = dataProcessResult.value.input_dim
+      }
+      if (dataProcessResult.value.output_dim) {
+        modelParams.value.output_dim = dataProcessResult.value.output_dim
+      }
+    }
+  } catch (error) {
+    console.error("恢复数据处理状态失败:", error)
+  }
+}
+
 // 组件挂载前加载优化历史和最近模型
 onBeforeMount(async () => {
-  // 并行加载优化历史和最近模型列表
+  // 并行加载优化历史、最近模型列表和数据集列表
   await Promise.all([
     loadOptimizationHistory(),
-    loadRecentModels()
+    loadRecentModels(),
+    loadDatasets()
   ])
 
   console.log("已加载最近模型列表:", recentModelPaths.value)
+
+  // 从localStorage恢复数据处理状态
+  restoreDataProcessState()
 
   // 如果有模型记录，自动选择第一个并加载
   if (recentModelPaths.value && recentModelPaths.value.length > 0) {
@@ -685,32 +806,44 @@ onBeforeMount(async () => {
               <el-row :gutter="20">
                 <el-col :span="24">
                   <div class="opt-select-container">
-                    <el-card shadow="hover" class="opt-select-card">
-                      <template #header>
-                        <div class="opt-header">
-                          <span>选择优化结果</span>
+                    <!-- 选择数据集卡片 -->
+                    <el-card shadow="hover" class="opt-select-card compact-card">
+                      <div class="inline-form-layout">
+                        <div class="inline-form-label">选择数据集:</div>
+                        <div class="inline-form-content">
+                          <el-select v-model="selectedDatasetPath" placeholder="选择数据集" filterable clearable
+                            :loading="loadingDatasets" @change="handleDatasetSelect">
+                            <el-option v-for="dataset in datasets" :key="dataset.path"
+                              :label="`${dataset.date} (训练集: ${dataset.info['训练集样本数'] || '?'}, 验证集: ${dataset.info['验证集样本数'] || '?'}, 测试集: ${dataset.info['测试集样本数'] || '?'})`"
+                              :value="dataset.path" />
+                          </el-select>
+                          <span class="inline-form-tip">选择已处理的数据集</span>
                         </div>
-                      </template>
+                      </div>
+                    </el-card>
 
-                      <div class="opt-content">
-                        <div class="opt-select">
+                    <!-- 选择优化结果卡片 -->
+                    <el-card shadow="hover" class="opt-select-card compact-card" style="margin-top: 10px;">
+                      <div class="inline-form-layout">
+                        <div class="inline-form-label">选择优化结果:</div>
+                        <div class="inline-form-content">
                           <el-select v-model="selectedOptimizationId" placeholder="选择优化结果" filterable clearable
-                            style="width: 100%" :loading="loadingOptHistory" @change="loadOptimizationResult">
+                            :loading="loadingOptHistory" @change="loadOptimizationResult">
                             <el-option v-for="item in optimizationHistory" :key="item.id"
-                              :label="`${item.date} (最佳参数: d_model=${item.best_params.d_model}, nhead=${item.best_params.nhead})`"
+                              :label="`${item.date} (最佳参数: d_model=${item.best_params.d_model}, nhead=${item.best_params.nhead}, num_layers=${item.best_params.num_layers}, lr=${item.best_params.lr}, weight_decay=${item.best_params.weight_decay})`"
                               :value="item.id" />
                           </el-select>
-                          <div class="form-tip">选择已完成的优化结果应用其最佳参数</div>
-                        </div>
+                          <span class="inline-form-tip">选择已完成的优化结果</span>
 
-                        <div class="opt-buttons">
-                          <el-button type="primary" size="small" :icon="View" :disabled="!selectedOptimizationId"
-                            @click="viewOptimizationResult(selectedOptimizationId)">
-                            查看优化详情
-                          </el-button>
-                          <el-button type="success" size="small" :icon="ArrowRight" @click="goToOptimizationPage">
-                            新的优化任务
-                          </el-button>
+                          <div class="inline-form-buttons">
+                            <el-button type="primary" size="small" :icon="View" :disabled="!selectedOptimizationId"
+                              @click="viewOptimizationResult(selectedOptimizationId)">
+                              查看详情
+                            </el-button>
+                            <el-button type="success" size="small" :icon="ArrowRight" @click="goToOptimizationPage">
+                              新优化
+                            </el-button>
+                          </div>
                         </div>
                       </div>
                     </el-card>
@@ -865,6 +998,28 @@ onBeforeMount(async () => {
 
             <!-- 自定义参数标签页 -->
             <el-tab-pane name="custom" label="自定义参数">
+              <!-- 选择数据集卡片 -->
+              <el-row :gutter="20">
+                <el-col :span="24">
+                  <el-card shadow="hover" class="opt-select-card compact-card">
+                    <div class="inline-form-layout">
+                      <div class="inline-form-label">选择数据集:</div>
+                      <div class="inline-form-content">
+                        <el-select v-model="selectedDatasetPath" placeholder="选择数据集" filterable clearable
+                          :loading="loadingDatasets" @change="handleDatasetSelect">
+                          <el-option v-for="dataset in datasets" :key="dataset.path"
+                            :label="`${dataset.date} (训练集: ${dataset.info['训练集样本数'] || '?'}, 验证集: ${dataset.info['验证集样本数'] || '?'}, 测试集: ${dataset.info['测试集样本数'] || '?'})`"
+                            :value="dataset.path" />
+                        </el-select>
+                        <span class="inline-form-tip">选择已处理的数据集</span>
+                      </div>
+                    </div>
+                  </el-card>
+                </el-col>
+              </el-row>
+
+              <el-divider>模型参数设置</el-divider>
+
               <el-row :gutter="20">
                 <el-col :span="12">
                   <el-card class="param-card" shadow="hover">
@@ -1265,6 +1420,10 @@ onBeforeMount(async () => {
 
   .opt-select-card {
     background-color: #f8fafc;
+
+    &.compact-card {
+      padding: 12px;
+    }
   }
 
   .opt-header {
@@ -1287,6 +1446,57 @@ onBeforeMount(async () => {
       gap: 10px;
     }
   }
+
+  /* 行内表单布局 */
+  .inline-form-layout {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .inline-form-label {
+    font-weight: 600;
+    color: #303133;
+    white-space: nowrap;
+    min-width: 100px;
+  }
+
+  .inline-form-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+
+    .el-select {
+      min-width: 400px;
+      width: 100%;
+    }
+  }
+
+  /* 确保下拉选项能够显示完整内容 */
+  :deep(.el-select-dropdown__item) {
+    white-space: normal;
+    height: auto;
+    padding: 8px 12px;
+    line-height: 1.5;
+  }
+
+  .inline-form-tip {
+    color: #909399;
+    font-size: 12px;
+    font-style: italic;
+    white-space: nowrap;
+  }
+
+  .inline-form-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+
 
   /* 模型保存路径输入框组样式 */
   .path-input-group {

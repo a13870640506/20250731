@@ -62,7 +62,7 @@ const currentIp = ipMatch ? ipMatch[0] : "未连接";
                     <el-icon>
                         <Monitor />
                     </el-icon>
-                    <span>隧道位移预测</span>
+                    <span>隧道位移实时预测</span>
                 </el-menu-item>
                 <el-sub-menu index="/visual">
                     <template #title>

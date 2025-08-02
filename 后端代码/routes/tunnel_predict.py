@@ -27,6 +27,36 @@ os.makedirs(PREDICTION_DIR, exist_ok=True)
 # 存储预测历史记录
 PREDICTION_HISTORY = []
 
+# 历史记录文件路径
+HISTORY_FILE = os.path.join(PREDICTION_DIR, 'prediction_history.json')
+
+# 从文件加载历史记录
+def load_prediction_history():
+    global PREDICTION_HISTORY
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                PREDICTION_HISTORY = json.load(f)
+            print(f"已从{HISTORY_FILE}加载{len(PREDICTION_HISTORY)}条历史记录")
+        else:
+            PREDICTION_HISTORY = []
+            print(f"历史记录文件不存在，已初始化空记录列表")
+    except Exception as e:
+        print(f"加载历史记录失败: {str(e)}")
+        PREDICTION_HISTORY = []
+
+# 保存历史记录到文件
+def save_prediction_history_to_file():
+    try:
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(PREDICTION_HISTORY, f, ensure_ascii=False, indent=2)
+        print(f"已保存{len(PREDICTION_HISTORY)}条历史记录到{HISTORY_FILE}")
+    except Exception as e:
+        print(f"保存历史记录失败: {str(e)}")
+
+# 启动时加载历史记录
+load_prediction_history()
+
 
 def _build_sequence(poisson_ratio, friction_angle, cohesion, dilation_angle,
                     elastic_modulus, input_scaler, device):
@@ -348,7 +378,18 @@ def predict_displacement():
             
             # 只保留最近的50条记录
             if len(PREDICTION_HISTORY) > 50:
-                PREDICTION_HISTORY.pop(0)
+                oldest_record = PREDICTION_HISTORY.pop(0)
+                # 尝试删除最旧记录的文件夹
+                try:
+                    folder_path = oldest_record.get('folder_path')
+                    if folder_path and os.path.exists(folder_path):
+                        shutil.rmtree(folder_path)
+                        print(f"删除旧预测记录文件夹: {folder_path}")
+                except Exception as e:
+                    print(f"删除旧预测记录文件夹失败: {str(e)}")
+            
+            # 保存历史记录到文件
+            save_prediction_history_to_file()
             
             return jsonify({
                 'success': True,
@@ -412,6 +453,9 @@ def delete_prediction_history(prediction_id):
             
             # 从历史记录中删除
             deleted_record = PREDICTION_HISTORY.pop(record_index)
+            
+            # 保存更新后的历史记录到文件
+            save_prediction_history_to_file()
             
             return jsonify({
                 'success': True,
@@ -521,8 +565,12 @@ def save_prediction_history():
                 folder_path = oldest_record.get('folder_path')
                 if folder_path and os.path.exists(folder_path):
                     shutil.rmtree(folder_path)
+                    print(f"删除旧预测记录文件夹: {folder_path}")
             except Exception as e:
                 print(f"删除旧预测记录文件夹失败: {str(e)}")
+        
+        # 保存历史记录到文件
+        save_prediction_history_to_file()
             
         return jsonify({
             'success': True,
