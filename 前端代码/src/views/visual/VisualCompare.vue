@@ -38,6 +38,30 @@ const datasetOptions = [
   { label: '测试集', value: 'test' }
 ]
 
+// 对指标进行校验和清洗，确保数值合理
+const sanitizeMetrics = (metrics = {}) => {
+  const result = {}
+  // R2 理论范围为 (-∞, 1]，这里只限制上限
+  if (typeof metrics.r2 === 'number') {
+    result.r2 = Math.min(metrics.r2, 1)
+  }
+  // MSE 可能存储在 mse 或 loss 字段中，且不应为负
+  const mseVal =
+    typeof metrics.mse === 'number'
+      ? metrics.mse
+      : typeof metrics.loss === 'number'
+        ? metrics.loss
+        : undefined
+  if (typeof mseVal === 'number') {
+    result.mse = Math.max(mseVal, 0)
+  }
+  // MAPE 绝对值不应为负
+  if (typeof metrics.mape === 'number') {
+    result.mape = Math.max(metrics.mape, 0)
+  }
+  return result
+}
+
 // 误差数据表格
 const errorTableData = computed(() => {
   if (!modelResult.value) return []
@@ -49,38 +73,48 @@ const errorTableData = computed(() => {
   parameters.forEach(param => {
     // 只显示选定的参数或全部参数
     if (selectedParameter.value === 'all' || selectedParameter.value === param) {
-      const trainMetrics = modelResult.value.train_metrics_detail?.[param] || {}
-      const valMetrics = modelResult.value.val_metrics_detail?.[param] || {}
-      const testMetrics = modelResult.value.test_metrics_detail?.[param] || {}
+      const trainMetrics = sanitizeMetrics(
+        modelResult.value.train_metrics_detail?.[param] || modelResult.value.train_metrics || {}
+      )
+      const valMetrics = sanitizeMetrics(
+        modelResult.value.val_metrics_detail?.[param] || modelResult.value.val_metrics || {}
+      )
+      const testMetrics = sanitizeMetrics(
+        modelResult.value.test_metrics_detail?.[param] || modelResult.value.test_metrics || {}
+      )
 
       data.push({
         parameter: param,
-        train_r2: trainMetrics.r2 || 'N/A',
-        train_mse: trainMetrics.mse || 'N/A',
-        train_mape: trainMetrics.mape || 'N/A',
-        val_r2: valMetrics.r2 || 'N/A',
-        val_mse: valMetrics.mse || 'N/A',
-        val_mape: valMetrics.mape || 'N/A',
-        test_r2: testMetrics.r2 || 'N/A',
-        test_mse: testMetrics.mse || 'N/A',
-        test_mape: testMetrics.mape || 'N/A'
+        train_r2: trainMetrics.r2 ?? 'N/A',
+        train_mse: trainMetrics.mse ?? 'N/A',
+        train_mape: trainMetrics.mape ?? 'N/A',
+        val_r2: valMetrics.r2 ?? 'N/A',
+        val_mse: valMetrics.mse ?? 'N/A',
+        val_mape: valMetrics.mape ?? 'N/A',
+        test_r2: testMetrics.r2 ?? 'N/A',
+        test_mse: testMetrics.mse ?? 'N/A',
+        test_mape: testMetrics.mape ?? 'N/A'
       })
     }
   })
 
   // 如果显示全部参数，添加一个总体行
   if (selectedParameter.value === 'all') {
+    const trainMetrics = sanitizeMetrics(modelResult.value.train_metrics || {})
+    const valMetrics = sanitizeMetrics(modelResult.value.val_metrics || {})
+    const testMetrics = sanitizeMetrics(modelResult.value.test_metrics || {})
+
     data.push({
       parameter: '总体',
-      train_r2: modelResult.value.train_metrics?.r2 || 'N/A',
-      train_mse: modelResult.value.train_metrics?.loss || 'N/A',
-      train_mape: modelResult.value.train_metrics?.mape || 'N/A',
-      val_r2: modelResult.value.val_metrics?.r2 || 'N/A',
-      val_mse: modelResult.value.val_metrics?.loss || 'N/A',
-      val_mape: modelResult.value.val_metrics?.mape || 'N/A',
-      test_r2: modelResult.value.test_metrics?.r2 || 'N/A',
-      test_mse: modelResult.value.test_metrics?.loss || 'N/A',
-      test_mape: modelResult.value.test_metrics?.mape || 'N/A'
+      train_r2: trainMetrics.r2 ?? 'N/A',
+      train_mse: trainMetrics.mse ?? 'N/A',
+      train_mape: trainMetrics.mape ?? 'N/A',
+      val_r2: valMetrics.r2 ?? 'N/A',
+      val_mse: valMetrics.mse ?? 'N/A',
+      val_mape: valMetrics.mape ?? 'N/A',
+      test_r2: testMetrics.r2 ?? 'N/A',
+      test_mse: testMetrics.mse ?? 'N/A',
+      test_mape: testMetrics.mape ?? 'N/A'
     })
   }
 
@@ -143,53 +177,6 @@ const analyzeModel = async () => {
 
     if (response.data && response.data.success) {
       modelResult.value = response.data.data
-
-      // 补充详细指标数据（在实际应用中应从后端获取）
-      // 这里我们模拟一些详细的指标数据
-      const parameters = ['拱顶下沉', '拱顶下沉2', '周边收敛1', '周边收敛2', '拱脚下沉']
-
-      // 为每个数据集添加详细指标
-      modelResult.value.train_metrics_detail = {}
-      modelResult.value.val_metrics_detail = {}
-      modelResult.value.test_metrics_detail = {}
-
-      parameters.forEach(param => {
-        // 训练集
-        const trainR2 = modelResult.value.train_metrics?.r2 || 0.95
-        const trainMape = modelResult.value.train_metrics?.mape || 5.0
-        const trainMse = modelResult.value.train_metrics?.loss || 0.01
-
-        modelResult.value.train_metrics_detail[param] = {
-          r2: trainR2 * (0.95 + Math.random() * 0.1),
-          mape: trainMape * (0.9 + Math.random() * 0.2),
-          mse: trainMse * (0.9 + Math.random() * 0.2),
-          mae: trainMse * 0.8 * (0.9 + Math.random() * 0.2)
-        }
-
-        // 验证集
-        const valR2 = modelResult.value.val_metrics?.r2 || 0.93
-        const valMape = modelResult.value.val_metrics?.mape || 6.0
-        const valMse = modelResult.value.val_metrics?.loss || 0.015
-
-        modelResult.value.val_metrics_detail[param] = {
-          r2: valR2 * (0.95 + Math.random() * 0.1),
-          mape: valMape * (0.9 + Math.random() * 0.2),
-          mse: valMse * (0.9 + Math.random() * 0.2),
-          mae: valMse * 0.8 * (0.9 + Math.random() * 0.2)
-        }
-
-        // 测试集
-        const testR2 = modelResult.value.test_metrics?.r2 || 0.9
-        const testMape = modelResult.value.test_metrics?.mape || 7.0
-        const testMse = modelResult.value.test_metrics?.loss || 0.02
-
-        modelResult.value.test_metrics_detail[param] = {
-          r2: testR2 * (0.95 + Math.random() * 0.1),
-          mape: testMape * (0.9 + Math.random() * 0.2),
-          mse: testMse * (0.9 + Math.random() * 0.2),
-          mae: testMse * 0.8 * (0.9 + Math.random() * 0.2)
-        }
-      })
 
       showAnalysis.value = true
       ElMessage.success('模型分析完成')
