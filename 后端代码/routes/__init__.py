@@ -7,13 +7,15 @@ from flask import Blueprint
 model_training_bp = Blueprint('model_training', __name__, url_prefix='/transformer')
 param_optimization_bp = Blueprint('param_optimization', __name__, url_prefix='/transformer')
 visualization_bp = Blueprint('visualization', __name__, url_prefix='/transformer')
+tunnel_predict_bp = Blueprint('tunnel_predict', __name__, url_prefix='/transformer')
 
 # 导入路由模块
-from routes import model_training, param_optimization, visualization
+from routes import model_training, param_optimization, visualization, tunnel_predict
 
 # 蓝图列表，用于在app.py中注册
 blueprints = [
     model_training_bp,
     param_optimization_bp,
-    visualization_bp
+    visualization_bp,
+    tunnel_predict_bp
 ]

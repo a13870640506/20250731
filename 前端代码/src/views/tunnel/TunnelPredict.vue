@@ -2,357 +2,302 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
-import { predictService } from '@/api/transformer'
+import { predictService, getTunnelModelsService } from '@/api/transformer'
 
-// 创建响应式数据存储用户输入的内容
-const formData = ref({
-  model_path: "",
-  input_dim: 1,
-  output_dim: 1,
+// 创建响应式数据存储用户输入的围岩参数
+const inputParams = reactive({
+  poissonRatio: 0.3,        // 泊松比
+  frictionAngle: 30,        // 内摩擦角（°）
+  cohesion: 0.5,            // 粘聚力（Mpa）
+  dilationAngle: 5,         // 剪胀角（°）
+  elasticModulus: 2000      // 弹性模量（MPa）
 })
 
-// 保存用户上传的文件
-const selectedFiles = ref({
-  input: null,
-  output: null
-});
-
-const formFiles = ref({
-  input: null,
-  output: null
-});
-
-// 保存历史模型路径
-const historyModelPaths = ref([]);
-
-// 选中的历史模型路径
-const selectedModelPath = ref(null);
-
-// 当前激活的Tab
-const activeTab = ref('tab1');
-
-// 从本地存储加载历史模型路径
-const loadHistoryModelPaths = () => {
-  const savedPaths = localStorage.getItem('historyModelPaths');
-  if (savedPaths) {
-    try {
-      historyModelPaths.value = JSON.parse(savedPaths);
-    } catch (e) {
-      console.error('解析历史模型路径失败:', e);
-      historyModelPaths.value = [];
-    }
-  }
-};
-
-// 复制选中的历史模型路径
-const copySelectedModelPath = () => {
-  if (selectedModelPath.value) {
-    navigator.clipboard.writeText(selectedModelPath.value).then(() => {
-      ElMessage.success('历史模型路径已复制到剪贴板！');
-    }).catch(err => {
-      ElMessage.error(`复制失败: ${err}`);
-    });
-  } else {
-    ElMessage.warning('未选择历史模型路径，无法复制。');
-  }
-};
-
-// 处理文件选择变化的事件
-const saveFile = (type, event) => {
-  const file = event.target.files[0];
-  if (file) {
-    selectedFiles.value[type] = file;
-    formFiles.value[type] = file;
-    console.log(`已选择${type}文件:`, file.name);
-  }
-};
-
 // 预测结果
-const predictionResult = ref({
-  actual: [],
-  predicted: [],
+const predictionResult = reactive({
+  crownSettlement1: null,   // 拱顶下沉1（mm）
+  crownSettlement2: null,   // 拱顶下沉2（mm）
+  convergence1: null,       // 周边收敛1（mm）
+  convergence2: null,       // 周边收敛2（mm）
+  footSettlement: null,     // 拱脚下沉1（mm）
   metrics: {
+    r2: null,
     mse: null,
-    rmse: null,
-    r2: null
-  },
-  timestamps: [],
-  time_series_plot: null,
-  scatter_plot: null,
-  result_dir: null
-});
-
-// 是否显示结果
-const showResult = ref(false);
-
-// 是否有实际值可供比较
-const hasActualValues = ref(false);
-
-// 点击预测按钮
-const isLoading = ref(false);
-const predict = async () => {
-  if (!formFiles.value.input) {
-    ElMessage.warning('请上传输入文件');
-    return;
+    mape: null
   }
+})
 
-  if (!formData.value.model_path) {
-    ElMessage.warning('请输入或选择模型路径');
-    return;
+// 模型相关数据
+const modelData = reactive({
+  modelPath: '',
+  availableModels: []
+})
+
+// 加载状态
+const isLoading = ref(false)
+const showResult = ref(false)
+
+// 从后端获取可用模型列表
+const fetchAvailableModels = async () => {
+  try {
+    isLoading.value = true
+    const res = await getTunnelModelsService()
+    if (res.data && res.data.success) {
+      modelData.availableModels = res.data.data || []
+      if (modelData.availableModels.length > 0) {
+        // 默认选择第一个模型
+        modelData.modelPath = modelData.availableModels[0].path
+      }
+    } else {
+      ElMessage.warning('获取模型列表失败')
+    }
+  } catch (error) {
+    console.error('获取模型列表错误:', error)
+    ElMessage.error(`获取模型列表失败: ${error.message}`)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 执行预测
+const predict = async () => {
+  if (!modelData.modelPath) {
+    ElMessage.warning('请选择模型路径')
+    return
   }
 
   try {
-    isLoading.value = true;
-    ElMessage.info('正在进行预测，请稍候...');
+    isLoading.value = true
+    ElMessage.info('正在进行预测，请稍候...')
 
-    // 模拟预测过程
-    setTimeout(() => {
-      // 模拟API响应
-      const res = {
-        data: {
-          success: true,
-          message: '预测成功',
-          data: {
-            predicted: Array.from({length: 100}, (_, i) => Math.sin(i/10) + Math.random()*0.2),
-            actual: formFiles.value.output ? Array.from({length: 100}, (_, i) => Math.sin(i/10)) : [],
-            metrics: {
-              mse: 0.021,
-              rmse: 0.145,
-              r2: 0.932
-            },
-            timestamps: Array.from({length: 100}, (_, i) => i + 1),
-            time_series_plot: 'base64_encoded_image_placeholder',
-            scatter_plot: formFiles.value.output ? 'base64_encoded_image_placeholder' : null,
-            result_dir: '/results/prediction_result_123'
-          }
-        }
-      };
+    console.log('预测请求参数:', {
+      modelPath: modelData.modelPath,
+      poissonRatio: inputParams.poissonRatio,
+      frictionAngle: inputParams.frictionAngle,
+      cohesion: inputParams.cohesion,
+      dilationAngle: inputParams.dilationAngle,
+      elasticModulus: inputParams.elasticModulus
+    })
 
-      if (res.data && res.data.success) {
-        ElMessage.success('预测成功');
-        
-        predictionResult.value = res.data.data;
-        hasActualValues.value = formFiles.value.output !== null;
-        
-        // 先设置显示结果标志
-        showResult.value = true;
-        
-        // 保存模型路径到历史记录
-        saveModelPathToHistory(formData.value.model_path);
-      } else {
-        ElMessage.error(res.data?.message || '预测失败');
+    // 准备请求数据
+    const requestData = {
+      model_path: modelData.modelPath,
+      input_params: {
+        poisson_ratio: inputParams.poissonRatio,
+        friction_angle: inputParams.frictionAngle,
+        cohesion: inputParams.cohesion,
+        dilation_angle: inputParams.dilationAngle,
+        elastic_modulus: inputParams.elasticModulus
       }
-      
-      isLoading.value = false;
-    }, 2000);
-    
+    }
+
+    // 发送预测请求
+    const res = await predictService(requestData)
+    console.log('预测响应:', res)
+
+    if (res.data && res.data.success) {
+      ElMessage.success('预测成功')
+
+      // 更新预测结果
+      const data = res.data.data
+      predictionResult.crownSettlement1 = data.crown_settlement1
+      predictionResult.crownSettlement2 = data.crown_settlement2
+      predictionResult.convergence1 = data.convergence1
+      predictionResult.convergence2 = data.convergence2
+      predictionResult.footSettlement = data.foot_settlement
+
+      // 更新评估指标
+      predictionResult.metrics = data.metrics || {
+        r2: null,
+        mse: null,
+        mape: null
+      }
+
+      // 显示结果
+      showResult.value = true
+    } else {
+      ElMessage.error(res.data?.message || '预测失败')
+    }
   } catch (error) {
-    ElMessage.error(`预测失败: ${error.message}`);
-    console.error('预测错误:', error);
-    isLoading.value = false;
+    ElMessage.error(`预测失败: ${error.message}`)
+    console.error('预测错误:', error)
+  } finally {
+    isLoading.value = false
   }
-};
+}
 
-// 保存模型路径到历史记录
-const saveModelPathToHistory = (path) => {
-  if (!path) return;
-
-  // 检查是否已存在
-  const index = historyModelPaths.value.indexOf(path);
-  if (index !== -1) {
-    // 如果已存在，移到最前面
-    historyModelPaths.value.splice(index, 1);
+// 格式化数值显示
+const formatNumber = (num) => {
+  if (num === null || num === undefined) return 'N/A'
+  // 如果数值很小，使用科学计数法
+  if (Math.abs(num) < 0.001) {
+    return num.toExponential(4)
   }
+  // 否则保留4位小数
+  return num.toFixed(4)
+}
 
-  // 添加到历史记录开头
-  historyModelPaths.value.unshift(path);
-
-  // 限制历史记录数量
-  if (historyModelPaths.value.length > 5) {
-    historyModelPaths.value = historyModelPaths.value.slice(0, 5);
-  }
-
-  // 保存到本地存储
-  localStorage.setItem('historyModelPaths', JSON.stringify(historyModelPaths.value));
-};
-
-// 选择历史模型路径
-const selectModelPath = (path) => {
-  formData.value.model_path = path;
-};
-
-// 复制结果路径
-const copyResultPath = () => {
-  if (predictionResult.value.result_dir) {
-    navigator.clipboard.writeText(predictionResult.value.result_dir).then(() => {
-      ElMessage.success('结果路径已复制到剪贴板！');
-    }).catch(err => {
-      ElMessage.error(`复制失败: ${err}`);
-    });
-  }
-};
-
-// 添加格式化科学计数的函数
-const formatScientificNumber = (num) => {
-  // 如果数值很小（小于0.0001），使用科学计数法
-  if (Math.abs(num) < 0.0001) {
-    return num.toExponential(7);
-  }
-  // 否则使用固定小数位
-  return num.toFixed(7);
-};
-
-// 组件挂载时初始化
+// 组件挂载时获取模型列表
 onMounted(() => {
-  // 加载历史模型路径
-  loadHistoryModelPaths();
-});
+  fetchAvailableModels()
+})
 </script>
 
 <template>
   <div class="tunnel-predict">
     <el-row :gutter="20">
-      <el-col :span="6">
+      <!-- 左侧输入参数区域 -->
+      <el-col :span="10">
         <el-card class="input-card">
           <template #header>
             <div class="card-header">
-              <span>隧道位移预测</span>
+              <span>围岩参数输入</span>
             </div>
           </template>
 
-          <el-form :model="formData" label-position="top">
-            <el-form-item label="模型路径">
-              <el-input v-model="formData.model_path" placeholder="请输入模型路径" />
+          <el-form label-position="top">
+            <!-- 模型选择 -->
+            <el-form-item label="选择模型">
+              <el-select v-model="modelData.modelPath" placeholder="请选择模型" style="width: 100%">
+                <el-option v-for="model in modelData.availableModels" :key="model.path" :label="model.name"
+                  :value="model.path" />
+              </el-select>
+              <div class="form-tip">从后端获取的可用模型列表</div>
             </el-form-item>
 
-            <el-row :gutter="20" v-if="historyModelPaths.length > 0">
-              <el-col :span="24">
-                <el-form-item label="历史模型路径">
-                  <el-select v-model="selectedModelPath" placeholder="选择历史模型路径" style="width: 100%">
-                    <el-option v-for="(path, index) in historyModelPaths" :key="index" :label="path" :value="path" />
-                  </el-select>
-                  <div class="path-actions" v-if="selectedModelPath">
-                    <el-button size="small" type="primary" @click="copySelectedModelPath" style="margin-top: 8px;">
-                      复制路径
-                    </el-button>
-                    <el-button size="small" type="success" @click="selectModelPath(selectedModelPath)"
-                      style="margin-top: 8px;">
-                      使用此路径
-                    </el-button>
-                  </div>
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-form-item label="输入文件 (时间序列数据)">
-              <div class="file-upload">
-                <input type="file" @change="(e) => saveFile('input', e)" accept=".csv" />
-              </div>
+            <!-- 围岩参数输入 -->
+            <el-form-item label="泊松比">
+              <el-input-number v-model="inputParams.poissonRatio" :min="0.1" :max="0.5" :step="0.01" :precision="2"
+                style="width: 100%" />
             </el-form-item>
 
-            <el-form-item label="输出文件 (可选，用于评估)">
-              <div class="file-upload">
-                <input type="file" @change="(e) => saveFile('output', e)" accept=".csv" />
-              </div>
+            <el-form-item label="内摩擦角 (°)">
+              <el-input-number v-model="inputParams.frictionAngle" :min="10" :max="50" :step="1" style="width: 100%" />
             </el-form-item>
 
-            <el-form-item label="输入维度">
-              <el-input v-model.number="formData.input_dim" type="number" placeholder="请输入维度" />
-              <div class="form-tip">输入时间序列的维度，默认值为1</div>
+            <el-form-item label="粘聚力 (MPa)">
+              <el-input-number v-model="inputParams.cohesion" :min="0.1" :max="5" :step="0.1" :precision="2"
+                style="width: 100%" />
             </el-form-item>
 
-            <el-form-item label="输出维度">
-              <el-input v-model.number="formData.output_dim" type="number" placeholder="请输入维度" />
-              <div class="form-tip">输出时间序列的维度，默认值为1</div>
+            <el-form-item label="剪胀角 (°)">
+              <el-input-number v-model="inputParams.dilationAngle" :min="0" :max="20" :step="1" style="width: 100%" />
             </el-form-item>
 
-            <el-button type="primary" :loading="isLoading" @click="predict" style="width: 100%;">开始预测</el-button>
+            <el-form-item label="弹性模量 (MPa)">
+              <el-input-number v-model="inputParams.elasticModulus" :min="500" :max="10000" :step="100"
+                style="width: 100%" />
+            </el-form-item>
+
+            <!-- 预测按钮 -->
+            <el-button type="primary" :loading="isLoading" @click="predict" style="width: 100%; margin-top: 20px;">
+              开始预测
+            </el-button>
           </el-form>
         </el-card>
       </el-col>
 
-      <el-col :span="18">
-        <el-card class="chart-card">
+      <!-- 右侧预测结果区域 -->
+      <el-col :span="14">
+        <el-card class="result-card">
           <template #header>
             <div class="card-header">
-              <div class="header-with-tabs">
-                <span>预测结果</span>
-                <!-- 将Tab标签移动到标题右侧 -->
-                <el-tabs v-if="showResult" v-model="activeTab" type="card" class="result-tabs">
-                  <el-tab-pane name="tab1" label="位移响应曲线"></el-tab-pane>
-                  <el-tab-pane v-if="hasActualValues && predictionResult.scatter_plot" name="tab2"
-                    label="散点对比图"></el-tab-pane>
-                  <el-tab-pane name="tab3" label="结果信息"></el-tab-pane>
-                </el-tabs>
-              </div>
+              <span>位移预测结果</span>
             </div>
           </template>
 
           <div v-if="!showResult" class="no-result">
             <el-empty description="暂无预测结果" />
-            <p class="no-result-tip">请在左侧上传文件并点击"开始预测"按钮</p>
+            <p class="no-result-tip">请在左侧输入围岩参数并点击"开始预测"按钮</p>
           </div>
 
-          <template v-else>
-            <!-- 评估指标放在图表之上 -->
-            <div class="metrics-summary" v-if="hasActualValues">
-              <el-row :gutter="30">
-                <el-col :span="8">
-                  <div class="metric-item">
-                    <div class="metric-label">均方误差 (MSE):</div>
-                    <div class="metric-value-inline">{{ predictionResult.metrics.mse ?
-                      formatScientificNumber(predictionResult.metrics.mse) : 'N/A' }}</div>
-                  </div>
-                </el-col>
-                <el-col :span="8">
-                  <div class="metric-item">
-                    <div class="metric-label">均方根误差 (RMSE):</div>
-                    <div class="metric-value-inline">{{ predictionResult.metrics.rmse ?
-                      formatScientificNumber(predictionResult.metrics.rmse) : 'N/A' }}</div>
-                  </div>
-                </el-col>
-                <el-col :span="8">
-                  <div class="metric-item">
-                    <div class="metric-label">决定系数 (R2):</div>
-                    <div class="metric-value-inline">{{ predictionResult.metrics.r2 ?
-                      predictionResult.metrics.r2.toFixed(7) : 'N/A' }}</div>
-                  </div>
-                </el-col>
-              </el-row>
-            </div>
+          <div v-else class="result-content">
+            <!-- 位移预测结果 -->
+            <el-row :gutter="20" class="result-section">
+              <el-col :span="24">
+                <h3 class="section-title">隧道位移预测值</h3>
+              </el-col>
 
-            <!-- 根据activeTab显示对应内容 -->
-            <div v-if="activeTab === 'tab1'" class="plot-container">
-              <div class="placeholder-image">
-                <p>位移响应曲线图表将显示在这里</p>
-              </div>
-            </div>
+              <el-col :span="12">
+                <div class="result-item">
+                  <div class="result-label">拱顶下沉1 (mm):</div>
+                  <div class="result-value">{{ formatNumber(predictionResult.crownSettlement1) }}</div>
+                </div>
+              </el-col>
 
-            <div v-if="activeTab === 'tab2' && hasActualValues && predictionResult.scatter_plot"
-              class="plot-container scatter-container">
-              <div class="placeholder-image">
-                <p>散点对比图将显示在这里</p>
-              </div>
-            </div>
+              <el-col :span="12">
+                <div class="result-item">
+                  <div class="result-label">拱顶下沉2 (mm):</div>
+                  <div class="result-value">{{ formatNumber(predictionResult.crownSettlement2) }}</div>
+                </div>
+              </el-col>
 
-            <div v-if="activeTab === 'tab3'" class="result-info-container">
-              <h3>结果保存路径</h3>
-              <el-input v-model="predictionResult.result_dir" readonly>
-                <template #append>
-                  <el-button @click="copyResultPath">复制</el-button>
+              <el-col :span="12">
+                <div class="result-item">
+                  <div class="result-label">周边收敛1 (mm):</div>
+                  <div class="result-value">{{ formatNumber(predictionResult.convergence1) }}</div>
+                </div>
+              </el-col>
+
+              <el-col :span="12">
+                <div class="result-item">
+                  <div class="result-label">周边收敛2 (mm):</div>
+                  <div class="result-value">{{ formatNumber(predictionResult.convergence2) }}</div>
+                </div>
+              </el-col>
+
+              <el-col :span="12">
+                <div class="result-item">
+                  <div class="result-label">拱脚下沉 (mm):</div>
+                  <div class="result-value">{{ formatNumber(predictionResult.footSettlement) }}</div>
+                </div>
+              </el-col>
+            </el-row>
+
+            <!-- 评估指标 -->
+            <el-row :gutter="20" class="result-section metrics-section" v-if="predictionResult.metrics.r2 !== null">
+              <el-col :span="24">
+                <h3 class="section-title">模型评估指标</h3>
+              </el-col>
+
+              <el-col :span="8">
+                <div class="metric-item">
+                  <div class="metric-label">决定系数 (R²):</div>
+                  <div class="metric-value">{{ formatNumber(predictionResult.metrics.r2) }}</div>
+                </div>
+              </el-col>
+
+              <el-col :span="8">
+                <div class="metric-item">
+                  <div class="metric-label">均方误差 (MSE):</div>
+                  <div class="metric-value">{{ formatNumber(predictionResult.metrics.mse) }}</div>
+                </div>
+              </el-col>
+
+              <el-col :span="8">
+                <div class="metric-item">
+                  <div class="metric-label">平均绝对百分比误差 (MAPE):</div>
+                  <div class="metric-value">{{ predictionResult.metrics.mape ?
+                    `${formatNumber(predictionResult.metrics.mape)}%` : 'N/A' }}</div>
+                </div>
+              </el-col>
+            </el-row>
+
+            <!-- 模型说明 -->
+            <div class="model-info">
+              <el-alert type="info" :closable="false" show-icon>
+                <template #title>
+                  <span>模型信息</span>
                 </template>
-              </el-input>
-
-              <div class="result-info-tips">
-                <p>
-                  <el-icon>
-                    <InfoFilled />
-                  </el-icon>
-                  预测结果已保存到上述路径，包含CSV数据文件和图表图像。
-                </p>
-              </div>
+                <div class="model-info-content">
+                  <p>当前使用模型: {{ modelData.modelPath }}</p>
+                  <p>模型类型: 基于Transformer的时序预测模型</p>
+                  <p>输入参数: 泊松比、内摩擦角、粘聚力、剪胀角、弹性模量</p>
+                  <p>输出参数: 拱顶下沉1、拱顶下沉2、周边收敛1、周边收敛2、拱脚下沉</p>
+                </div>
+              </el-alert>
             </div>
-          </template>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -362,176 +307,16 @@ onMounted(() => {
 <style scoped lang="scss">
 .tunnel-predict {
   padding: 20px;
-  position: relative;
-  z-index: auto;
 
   .card-header {
     font-size: 18px;
     font-weight: bold;
-
-    .header-with-tabs {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-
-      span {
-        flex-shrink: 0;
-      }
-
-      .result-tabs {
-        margin-left: 20px;
-        flex-grow: 1;
-
-        :deep(.el-tabs__header) {
-          margin: 0;
-        }
-
-        :deep(.el-tabs__nav-wrap) {
-          padding-bottom: 0;
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        :deep(.el-tabs__nav) {
-          border: none;
-        }
-
-        :deep(.el-tabs__item) {
-          height: 30px;
-          line-height: 30px;
-          font-size: 14px;
-          border: 1px solid #dcdfe6;
-          border-radius: 4px;
-          margin-left: 5px;
-
-          &.is-active {
-            background-color: #409EFF;
-            color: white;
-            border-color: #409EFF;
-          }
-        }
-
-        :deep(.el-tabs__content) {
-          display: none;
-        }
-      }
-    }
   }
 
-  .input-card {
+  .input-card,
+  .result-card {
     height: 100%;
-    overflow: visible;
-  }
-
-  .chart-card {
-    height: 100%;
-    overflow: visible;
-  }
-
-  .metrics-summary {
-    margin-bottom: 1px;
-    padding: 15px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-
-    .metric-item {
-      display: flex;
-      flex-direction: column;
-      padding: 8px 0;
-      max-width: 100%;
-
-      .metric-label {
-        font-weight: bold;
-        color: #606266;
-        margin-bottom: 5px;
-        white-space: nowrap;
-        width: 100%;
-      }
-
-      .metric-value-inline {
-        font-weight: bold;
-        color: #409EFF;
-        text-align: center;
-        padding: 5px;
-        background-color: #f0f7ff;
-        border-radius: 4px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-    }
-  }
-
-  .plot-container {
-    padding: 1px 10px;
-    margin-top: 0;
-
-    .placeholder-image {
-      width: 100%;
-      height: 400px;
-      background-color: #f5f7fa;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #909399;
-      font-style: italic;
-    }
-  }
-
-  .scatter-container {
-    display: flex;
-    justify-content: center;
-
-    .placeholder-image {
-      max-width: 600px;
-      width: 70%;
-    }
-  }
-
-  .result-info-container {
-    padding: 20px;
-
-    h3 {
-      margin-bottom: 15px;
-      font-size: 16px;
-      font-weight: bold;
-    }
-
-    .result-info-tips {
-      margin-top: 20px;
-      padding: 15px;
-      background-color: #f8f9fa;
-      border-radius: 8px;
-
-      p {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: #606266;
-
-        .el-icon {
-          color: #409EFF;
-        }
-      }
-    }
-  }
-
-  .file-upload {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-
-    input[type="file"] {
-      padding: 8px;
-      border: 1px solid #dcdfe6;
-      border-radius: 4px;
-      background-color: #f5f7fa;
-
-      &:hover {
-        border-color: #c0c4cc;
-      }
-    }
+    min-height: 600px;
   }
 
   .form-tip {
@@ -554,11 +339,86 @@ onMounted(() => {
     }
   }
 
-  .path-actions {
+  .result-content {
+    padding: 10px;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ebeef5;
+  }
+
+  .result-section {
+    margin-bottom: 30px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  }
+
+  .result-item {
     display: flex;
-    gap: 10px;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    flex-direction: column;
+    margin-bottom: 20px;
+
+    .result-label {
+      font-weight: bold;
+      color: #606266;
+      margin-bottom: 8px;
+    }
+
+    .result-value {
+      font-size: 20px;
+      font-weight: bold;
+      color: #409EFF;
+      text-align: center;
+      padding: 10px;
+      background-color: #f0f7ff;
+      border-radius: 4px;
+    }
+  }
+
+  .metrics-section {
+    background-color: #f0f9eb;
+
+    .metric-item {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 15px;
+
+      .metric-label {
+        font-weight: bold;
+        color: #606266;
+        margin-bottom: 8px;
+      }
+
+      .metric-value {
+        font-size: 16px;
+        font-weight: bold;
+        color: #67c23a;
+        text-align: center;
+        padding: 8px;
+        background-color: #f0f9eb;
+        border-radius: 4px;
+        border: 1px solid #e1f3d8;
+      }
+    }
+  }
+
+  .model-info {
+    margin-top: 20px;
+
+    .model-info-content {
+      padding: 10px 0;
+
+      p {
+        margin: 5px 0;
+        line-height: 1.5;
+      }
+    }
   }
 }
 </style>

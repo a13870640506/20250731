@@ -20,6 +20,14 @@ export function getRecentModelsService() {
   })
 }
 
+// 获取可用的隧道预测模型列表
+export function getTunnelModelsService() {
+  return request({
+    url: '/transformer/models',
+    method: 'get'
+  })
+}
+
 // 获取最新训练的模型
 export function getLatestModelService() {
   return request({
