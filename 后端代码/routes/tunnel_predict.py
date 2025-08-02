@@ -13,11 +13,41 @@ from datetime import datetime
 
 from routes import tunnel_predict_bp
 from my_model import TimeSeriesTransformer
-from my_inference import validate_model
 
 # 常量定义
 MODEL_DIR = './models'
 SCALER_DIR = './scalers'
+
+
+def _build_sequence(poisson_ratio, friction_angle, cohesion, dilation_angle,
+                    elastic_modulus, input_scaler, device):
+    """根据单次输入构造伪时序数据并完成标准化"""
+    # 构造4个时间步的参数矩阵
+    params = np.array([
+        poisson_ratio,
+        friction_angle,
+        cohesion,
+        dilation_angle,
+        elastic_modulus
+    ], dtype=np.float32)
+    values = np.tile(params, (4, 1))
+
+    # 伪造时间间隔，首个时间步为0，其余为1
+    deltas = np.array([0, 1, 1, 1], dtype=np.float32).reshape(-1, 1)
+
+    # 合并后进行标准化
+    features = np.hstack([values, deltas])
+    norm = input_scaler.transform(features)
+    values_norm = norm[:, :values.shape[1]]
+    deltas_norm = norm[:, values.shape[1]:]
+
+    # 构造注意力掩码并转为张量
+    mask = np.ones(4, dtype=bool)
+    values_tensor = torch.from_numpy(values_norm).unsqueeze(0).to(device)
+    deltas_tensor = torch.from_numpy(deltas_norm).unsqueeze(0).to(device)
+    mask_tensor = torch.from_numpy(mask).unsqueeze(0).to(device)
+    return values_tensor, deltas_tensor, mask_tensor
+
 
 @tunnel_predict_bp.route('/models', methods=['GET'])
 def get_available_models():
@@ -188,43 +218,22 @@ def predict_displacement():
         
         # 准备输入数据
         try:
-            # 从输入参数中提取值
+            # 从输入参数中提取值并构造伪时序序列
             poisson_ratio = float(input_params['poisson_ratio'])
             friction_angle = float(input_params['friction_angle'])
             cohesion = float(input_params['cohesion'])
             dilation_angle = float(input_params['dilation_angle'])
             elastic_modulus = float(input_params['elastic_modulus'])
-            
-            # 创建输入特征向量 - 参照main.py中的数据处理逻辑
-            # 模拟时序数据，与main.py中的处理方式一致
-            time_steps = np.array([0, 1, 2, 3])  # 时间步
-            time_deltas = np.array([0, 1, 1, 1]).reshape(-1, 1)  # 时间间隔
-            
-            # 创建输入值矩阵 - 每个时间步都是相同的参数值
-            values = np.tile(
-                np.array([
-                    poisson_ratio,
-                    friction_angle,
-                    cohesion,
-                    dilation_angle,
-                    elastic_modulus
-                ]), 
-                (4, 1)  # 重复4次，对应4个时间步
+
+            values_tensor, deltas_tensor, mask_tensor = _build_sequence(
+                poisson_ratio,
+                friction_angle,
+                cohesion,
+                dilation_angle,
+                elastic_modulus,
+                input_scaler,
+                device
             )
-            
-            # 标准化输入
-            input_features = np.hstack([values, time_deltas])
-            input_norm = input_scaler.transform(input_features)
-            values_norm = input_norm[:, :values.shape[1]]
-            deltas_norm = input_norm[:, values.shape[1]:]
-            
-            # 创建注意力掩码
-            mask = np.ones(4, dtype=bool)  # 全部有效
-            
-            # 转换为张量
-            values_tensor = torch.FloatTensor(values_norm).unsqueeze(0).to(device)  # 添加批次维度
-            deltas_tensor = torch.FloatTensor(deltas_norm).unsqueeze(0).to(device)
-            mask_tensor = torch.BoolTensor(mask).unsqueeze(0).to(device)
         except Exception as e:
             return jsonify({
                 'success': False,
