@@ -1,0 +1,7 @@
+输入特征: Initial Inner Friction Angle (degree) , Initial Cohesion (MPa) , Dilatancy Angle (degree) , Young's Modulus (GPa) 
+输出标签: GD1, SL1, SL2, GJ1, Poisson's Ratio
+训练集样本数: 244
+验证集样本数: 36
+测试集样本数: 70
+输入维度: 5
+输出维度: 5

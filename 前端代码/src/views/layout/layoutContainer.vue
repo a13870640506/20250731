@@ -42,7 +42,7 @@ const currentIp = ipMatch ? ipMatch[0] : "未连接";
     <el-container class="layout-container">
         <el-aside width="200px">
             <div class="el-aside__logo">
-                DT-Tunnel-TS
+                DTAI-TE-RTPSP
             </div>
             <el-menu active-text-color="#ffd04b" background-color="#232323" :default-active="$route.path"
                 text-color="#fff" router>
@@ -103,7 +103,7 @@ const currentIp = ipMatch ? ipMatch[0] : "未连接";
                 <span></span>
                 <div>
                     <el-text>
-                        基于Transformer神经网络的隧道数字孪生系统-正演分析
+                        数字孪生+AI交通隧道衬砌受力性能实时预测系统
                     </el-text>
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between;">

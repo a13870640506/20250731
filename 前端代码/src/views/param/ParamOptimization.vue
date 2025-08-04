@@ -716,26 +716,57 @@ onMounted(async () => {
     box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   }
 
+  // 确保优化曲线页面左右卡片高度一致
+  .optimization-result .el-row {
+    display: flex;
+
+    .el-col {
+      display: flex;
+      flex-direction: column;
+
+      .el-card {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+
+        .el-card__body {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+        }
+      }
+    }
+  }
+
   .curve-container {
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    justify-content: space-between;
 
     .curve-image {
       max-width: 100%;
       border-radius: 4px;
       margin-bottom: 15px;
+      object-fit: contain;
     }
 
     .curve-actions {
       display: flex;
       justify-content: center;
       gap: 15px;
-      margin-top: 10px;
-      margin-bottom: 5px;
+      margin-top: auto;
+      padding-top: 10px;
     }
   }
 
   .params-list {
     margin-bottom: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 
     .param-item {
       display: flex;
@@ -763,7 +794,8 @@ onMounted(async () => {
   }
 
   .metrics-section {
-    margin-top: 20px;
+    margin-top: auto;
+    padding-top: 20px;
 
     .metrics-title {
       font-family: "Microsoft YaHei", "微软雅黑", sans-serif;

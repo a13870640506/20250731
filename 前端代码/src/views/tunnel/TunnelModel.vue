@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElLoading, ElMessageBox } from 'element-plus'
 import { trainModelService, uploadDatasetService, getOptimizationHistoryService, getOptimizationResultService, getModelResultService, getRecentModelsService, getDatasetsService } from '@/api/transformer'
 import { useRouter } from 'vue-router'
@@ -9,6 +9,9 @@ import { format } from '@/utils/format'
 
 // 当前激活的Tab
 const activeTab = ref('dataPrep')
+
+// 记录上一个激活的标签页，用于处理标签页切换逻辑
+const previousTab = ref('dataPrep')
 // 当前参数模式 - 贝叶斯优化或自定义
 const paramMode = ref('bayesian')
 
@@ -361,9 +364,14 @@ const uploadDataset = async () => {
 const confirmTraining = (fromParamTab) => {
   if (fromParamTab) {
     // 从参数定义页面开始训练，检查是否选择了数据集
-    if (!dataProcessResult.value.data_path) {
+    if (!selectedDatasetPath.value) {
       ElMessage.warning('请先选择数据集')
       return
+    }
+
+    // 确保数据处理结果中的数据路径与选择的数据集路径一致
+    if (dataProcessResult.value.data_path !== selectedDatasetPath.value) {
+      dataProcessResult.value.data_path = selectedDatasetPath.value
     }
   } else if (!showDataResult.value) {
     // 从其他页面开始训练，检查是否完成了数据准备
@@ -420,7 +428,9 @@ const startTraining = async (fromParamTab) => {
 
     // 创建FormData对象用于训练参数
     const formDataToUpload = new FormData()
-    formDataToUpload.append('data_path', dataProcessResult.value.data_path)
+    // 确保使用选择的数据集路径
+    const dataPath = selectedDatasetPath.value || dataProcessResult.value.data_path
+    formDataToUpload.append('data_path', dataPath)
     formDataToUpload.append('epochs', trainingParams.value.epochs)
     formDataToUpload.append('batch_size', trainingParams.value.batch_size)
     formDataToUpload.append('learning_rate', trainingParams.value.learning_rate)
@@ -593,11 +603,17 @@ const copySelectedModelPath = () => {
 
 // 选择数据集后更新数据处理结果
 const handleDatasetSelect = async (datasetPath) => {
-  if (!datasetPath) return
+  if (!datasetPath) {
+    // 如果清空了选择，重置相关状态
+    dataProcessResult.value.data_path = ''
+    return
+  }
 
   // 查找选中的数据集信息
   const selectedDataset = datasets.value.find(dataset => dataset.path === datasetPath)
   if (!selectedDataset) return
+
+  console.log("选择数据集:", selectedDataset.path)
 
   // 更新数据处理结果
   dataProcessResult.value = {
@@ -619,6 +635,11 @@ const handleDatasetSelect = async (datasetPath) => {
 
   // 生成模型保存路径
   generateModelSavePath()
+
+  // 保存数据处理状态到localStorage
+  localStorage.setItem('tunnelModelDataPath', dataProcessResult.value.data_path)
+  localStorage.setItem('tunnelModelDataResult', JSON.stringify(dataProcessResult.value))
+  localStorage.setItem('tunnelModelShowDataResult', 'true')
 
   ElMessage.success(`已选择数据集: ${selectedDataset.date}`)
 }
@@ -660,8 +681,11 @@ onBeforeMount(async () => {
 
   console.log("已加载最近模型列表:", recentModelPaths.value)
 
-  // 从localStorage恢复数据处理状态
-  restoreDataProcessState()
+  // 仅在非数据准备标签页时恢复数据处理状态
+  // 或者如果用户明确从参数定义页面切换回来时恢复
+  if (activeTab.value !== 'dataPrep') {
+    restoreDataProcessState()
+  }
 
   // 如果有模型记录，自动选择第一个并加载
   if (recentModelPaths.value && recentModelPaths.value.length > 0) {
@@ -674,6 +698,20 @@ onBeforeMount(async () => {
 
   // 监听参数变化，自动更新模型保存路径
   generateModelSavePath()
+})
+
+// 监听标签页切换
+watch(activeTab, (newTab, oldTab) => {
+  previousTab.value = oldTab
+
+  // 当从其他标签页切换到数据准备标签页时
+  if (newTab === 'dataPrep' && oldTab !== 'dataPrep') {
+    // 如果之前从参数定义页面保存了数据处理状态，则恢复
+    const savedShowDataResult = localStorage.getItem('tunnelModelShowDataResult')
+    if (savedShowDataResult === 'true') {
+      restoreDataProcessState()
+    }
+  }
 })
 </script>
 

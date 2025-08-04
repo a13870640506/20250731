@@ -80,10 +80,12 @@ onMounted(() => {
                   <Connection />
                 </el-icon>
               </div>
-              <h2>DT-Tunnel-TS</h2>
+              <h2>DTAI-TE-RTPSP</h2>
             </div>
             <div class="system-title">
-              基于Transformer神经网络的<br>隧道数字孪生系统
+              数字孪生+AI交通隧道衬砌受力性能
+              <br></br>
+              实时预测系统
             </div>
             <div class="system-version">
               <span>版本: {{ systemInfo.version }}</span>
