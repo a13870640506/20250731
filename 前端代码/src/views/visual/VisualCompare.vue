@@ -206,30 +206,14 @@ const formatNumber = (value, type = 'default') => {
 
 // 获取图表URL
 const getImageUrl = (modelPath, paramName, datasetType) => {
-  // 构建API URL以获取图片
-  const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/model_image?path=`
-
-  // 处理验证集的特殊情况
-  if (datasetType === 'val') {
-    // 验证集使用测试集的图表格式
-    return `${baseApiUrl}${modelPath}&file=test_prediction_${paramName}_zh.png`
-  }
-
-  return `${baseApiUrl}${modelPath}&file=${datasetType}_prediction_${paramName}_zh.png`
+  const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/model_image`
+  return `${baseApiUrl}?path=${encodeURIComponent(modelPath)}&dataset=${datasetType}&param=${encodeURIComponent(paramName)}&type=prediction`
 }
 
 // 获取误差图表URL
 const getErrorImageUrl = (modelPath, paramName, datasetType) => {
-  // 构建API URL以获取误差图片
-  const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/model_image?path=`
-
-  // 处理验证集的特殊情况
-  if (datasetType === 'val') {
-    // 验证集使用测试集的误差图表格式
-    return `${baseApiUrl}${modelPath}&file=${paramName}_test_errors_zh.png`
-  }
-
-  return `${baseApiUrl}${modelPath}&file=${paramName}_${datasetType}_errors_zh.png`
+  const baseApiUrl = `${import.meta.env.VITE_API_URL || baseURL}/transformer/model_image`
+  return `${baseApiUrl}?path=${encodeURIComponent(modelPath)}&dataset=${datasetType}&param=${encodeURIComponent(paramName)}&type=error`
 }
 
 // 组件挂载时加载最近模型

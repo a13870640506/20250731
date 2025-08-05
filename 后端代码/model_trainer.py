@@ -364,6 +364,14 @@ class ModelTrainer:
             'train',
             model_save_dir
         )
+        val_plots = self._plot_predictions_individual(
+            val_labels,
+            val_preds,
+            param_names,
+            val_metrics_list,
+            'val',
+            model_save_dir
+        )
         test_plots = self._plot_predictions_individual(
             test_labels,
             test_preds,
@@ -376,11 +384,12 @@ class ModelTrainer:
         # 绘制相对误差图 - main.py中有这个功能
         self._plot_relative_errors_per_param(test_metrics_list, param_names, 'test', model_save_dir)
         self._plot_relative_errors_per_param(train_metrics_list, param_names, 'train', model_save_dir)
+        self._plot_relative_errors_per_param(val_metrics_list, param_names, 'val', model_save_dir)
 
         # 绘制预测值与真实值随样本索引变化的图
         self._plot_predictions_vs_index(test_labels, test_preds, param_names, 'test', model_save_dir)
         self._plot_predictions_vs_index(train_labels, train_preds, param_names, 'train', model_save_dir)
-
+        self._plot_predictions_vs_index(val_labels, val_preds, param_names, 'val', model_save_dir)
         # 简化指标供前端展示
         simple_train_metrics = {
             'loss': float(train_losses[-1]),
@@ -813,11 +822,19 @@ class ModelTrainer:
             save_dir = os.path.join(self.model_dir, 'train_results')
         os.makedirs(save_dir, exist_ok=True)
 
+        dataset_labels = {'train': '训练', 'val': '验证', 'test': '测试'}
+        legend_labels = {
+            'train': '训练集样本',
+            'val': '验证集样本',
+            'test': '测试集样本'
+        }
+        marker_map = {'train': 's', 'val': '^', 'test': 'o'}
+
         for i, param in enumerate(param_names):
-            title = f"{param} - {'测试' if dataset_type == 'test' else '训练'}集"
+            title = f"{param} - {dataset_labels.get(dataset_type, dataset_type)}集"
             xlabel = '真实值 (mm)'
             ylabel = '预测值 (mm)'
-            legend_label = '训练集样本' if dataset_type == 'train' else '测试集样本'
+            legend_label = legend_labels.get(dataset_type, '样本')
             metrics_text = (f'R² = {metrics[i]["r2"]:.4f}\n'
                             f'MSE = {metrics[i]["mse"]:.4f}\n'
                             f'MAPE = {metrics[i]["mape"]:.2f}%')
@@ -828,7 +845,7 @@ class ModelTrainer:
             param_pred = pred[:, i]
 
             # 设置 marker
-            marker = 's' if dataset_type == 'train' else 'o'  # 训练集用方形，测试集用圆形
+            marker = marker_map.get(dataset_type, 'o')  # 不同数据集使用不同形状
 
             # 散点图
             ax.scatter(param_true, param_pred, alpha=0.6, s=10, marker=marker, label=legend_label)
@@ -921,9 +938,12 @@ class ModelTrainer:
 
         result_images = []
 
+        dataset_labels = {'train': '训练', 'val': '验证', 'test': '测试'}
+        dataset_labels_en = {'train': 'Train', 'val': 'Validation', 'test': 'Test'}
+
         for i, param in enumerate(param_names):
             # 中文版
-            title = f"{param}相对误差 - {'测试' if dataset_type == 'test' else '训练'}集"
+            title = f"{param}相对误差 - {dataset_labels.get(dataset_type, dataset_type)}集"
             xlabel = '样本编号'
             ylabel = '相对误差 (%)'
             legend_label = '10%误差阈值'
@@ -974,7 +994,7 @@ class ModelTrainer:
             plt.close()
 
             # 英文版
-            title = f'Relative Errors for {param} - {dataset_type.capitalize()} Set'
+            title = f'Relative Errors for {param} - {dataset_labels_en.get(dataset_type, dataset_type.capitalize())} Set'
             xlabel = 'Sample Index'
             ylabel = 'Relative Error (%)'
             legend_label = '10% Error Threshold'
@@ -1022,9 +1042,12 @@ class ModelTrainer:
             sample_indices = np.arange(len(true))
 
         # 为每个参数单独绘图
+        dataset_labels = {'train': '训练', 'val': '验证', 'test': '测试'}
+        dataset_labels_en = {'train': 'Train', 'val': 'Validation', 'test': 'Test'}
+
         for i, param in enumerate(param_names):
             # 中文版
-            title_suffix = f' - {"测试" if dataset_type == "test" else "训练"}集'
+            title_suffix = f' - {dataset_labels.get(dataset_type, dataset_type)}集'
             true_label = '真实值'
             pred_label = '预测值'
             xlabel = '样本编号'
@@ -1067,7 +1090,7 @@ class ModelTrainer:
             plt.close()
 
             # 英文版
-            title_suffix = f' - {dataset_type.capitalize()} Set'
+            title_suffix = f' - {dataset_labels_en.get(dataset_type, dataset_type.capitalize())} Set'
             true_label = 'True Values'
             pred_label = 'Predictions'
             xlabel = 'Sample Index'

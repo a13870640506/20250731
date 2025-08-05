@@ -487,8 +487,17 @@ def get_model_image():
                 'message': '请提供图片路径'
             }), 400
         
-        # 获取文件名参数
+        # 获取文件名参数或根据数据集和参数构造文件名
         file_name = request.args.get('file')
+        dataset = request.args.get('dataset')
+        param_name = request.args.get('param')
+        img_type = request.args.get('type', 'prediction')
+
+        if not file_name and dataset and param_name:
+            if img_type == 'error':
+                file_name = f"{param_name}_{dataset}_errors_zh.png"
+            else:
+                file_name = f"{dataset}_prediction_{param_name}_zh.png"
         
         # 移除开头的斜杠
         if image_path.startswith('/'):
